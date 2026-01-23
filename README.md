@@ -13,8 +13,8 @@ git commit -m '커밋 내용'
 git push origin '브랜치 이름'
 
 # 각자 feature 브랜치 업데이트된 내용 동기화
-git checkout 'feature/(ui, ai, guide)'
-git pull origin 'feature/(ui, ai, guide)'
+git checkout 'feature/(ui, ai, guide) or main'
+git pull origin 'feature/(ui, ai, guide) or main'
 ```
 
 > 각자 브랜치에서 작업 후에 feature/(ui, guide, ai)브랜치에 pull request 하고 파트별로 1명이 검토 후에 merge 하고
