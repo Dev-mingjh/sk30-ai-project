@@ -164,14 +164,16 @@ clf = Pipeline(steps=[
 # [분석 모드] / [학습 모드] 스위치
 ANALYZE_MODE = True
 
-# --- [함수 1] 학습 곡선 (데이터 양에 따른 성능 변화) ---
+# --- [함수 1] 학습 곡선 (현재 파라미터 기준, 데이터 양에 따른 성능 변화) ---
 def plot_learning_curve(estimator, X, y, title="Learning Curve"):
     print("학습 곡선 계산 중...")
+    # train_score => 학습 데이터 자체를 다시 물어본 F1-Score
+    # test_score => 교차 검증 데이터의 F1-Score
     train_sizes, train_scores, test_scores = learning_curve(
         estimator, X, y, cv=3, n_jobs=-1, 
         train_sizes=np.linspace(0.1, 1.0, 5),
         scoring='f1_macro'
-    )
+    ) #cv=3 -> 전체 데이터를 3등분 한 뒤, (3-1) 세트 학습 | 1세트 검증 
 
     train_mean = np.mean(train_scores, axis=1)
     train_std = np.std(train_scores, axis=1)
@@ -191,15 +193,17 @@ def plot_learning_curve(estimator, X, y, title="Learning Curve"):
     plt.grid()
     plt.show()
 
-# --- [함수 2] 검증 곡선 (파라미터 값에 따른 성능 변화) ---
+# --- [함수 2] 검증 곡선 (파라미터 값(max_depth)에 따른 성능 변화) ---
 def plot_validation_curve(estimator, X, y, param_name, param_range, title="Validation Curve"):
     print("검증 곡선 계산 중...")
+    # train_score => 학습 데이터 자체를 다시 물어본 F1-Score
+    # test_score => 교차 검증 데이터의 F1-Score
     train_scores, test_scores = validation_curve(
         estimator, X, y, 
         param_name=param_name, 
         param_range=param_range,
         cv=3, scoring="f1_macro", n_jobs=-1
-    )
+    ) #cv=3 -> 전체 데이터를 3등분 한 뒤, (3-1) 세트 학습 | 1세트 검증 
 
     train_mean = np.mean(train_scores, axis=1)
     train_std = np.std(train_scores, axis=1)
@@ -234,11 +238,15 @@ if ANALYZE_MODE:
 
 #################################### 모델 학습 및 저장 ###################################
 if not ANALYZE_MODE:
+    X_sample = X_train.sample(n=30000, random_state=42)
+    y_sample = y_train.loc[X_sample.index]
+
     # 모델 학습
     print("모델 학습 중...")
     clf.fit(X_train, y_train)
 
     # 예측값 생성 및 Classification Report 출력 (Precision, Recall, F1-Score)
+    # 위 학습/검증 곡선의 교차 검증 F1-Score보다 높아야 함 (이유 : 더 많은 데이터로 학습된 모델 사용)
     y_pred = clf.predict(X_test)
     print("### Classification Report ###")
     print(classification_report(y_test, y_pred))
