@@ -153,18 +153,16 @@ clf = Pipeline(steps=[
     ("preprocess", preprocess),
     ("model", RandomForestClassifier(
         n_estimators=300, # 나무의 개수 (많을 수록 좋지만 학습 속도가 느려짐)
-        max_depth=15,     # 과적합 방지를 위해 나무의 최대 깊이 제한 (너무 깊으면 과적합)
-        min_samples_split=10,     # 과적합 방지를 위해 추가
-        min_samples_leaf=5,       # 너무 세세하게 외우는 것 방지
+        max_depth=20,     # 과적합 방지를 위해 나무의 최대 깊이 제한 (너무 깊으면 과적합)
         random_state=42,
         n_jobs=-1, # 병렬 처리 (가용 CPU 모두 사용)
-        class_weight="balanced" # 클래스 가중치 주입
+        class_weight="balanced_subsample" # 클래스 가중치 주입
     ))
 ])
 
 #################################### 하이퍼 파라미터 분석 ###################################
 # [분석 모드] / [학습 모드] 스위치
-ANALYZE_MODE = False
+ANALYZE_MODE = True
 
 # --- [함수 1] 학습 곡선 (데이터 양에 따른 성능 변화) ---
 def plot_learning_curve(estimator, X, y, title="Learning Curve"):
