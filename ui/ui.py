@@ -1,5 +1,6 @@
 import streamlit as st
 import matplotlib.pyplot as plt
+import os
 
 def render_sidebar_charts(df):
     #사이드바에 Matplotlib 시각화 리포트 표시
@@ -26,7 +27,6 @@ def display_chat_messages(messages):
     for msg in messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
-
 
 
 # 1. 페이지 설정
