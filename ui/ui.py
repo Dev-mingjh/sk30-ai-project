@@ -212,10 +212,10 @@ with st.sidebar:
     st.subheader("탐지 모델")
     st.write("- **모델:** RandomForest")
     st.write("- **데이터셋:** CICIDS2017")
-    st.write("- **성능 지표:** 정확도, F1-Score, Silhouette Score")
+    st.write("- **성능 지표:** F1 Score, Recall")
     st.divider()
     st.subheader("대응 가이드 DB")
-    st.write("- **DB:** MySQL")
+    st.write("- **DB:** Vector DB")
     st.write("- **참조:** MITRE ATT&CK")
     st.write("- **참조:** KISA 침해사고대응 안내서")
 
@@ -223,7 +223,7 @@ with st.sidebar:
 st.divider()
 st.markdown("""
 <div style="text-align: center; color: #6b7280; font-size: 0.875rem; padding: 1rem 0;">
-    <strong>HiFive</strong> | 
+    <strong>HighFive</strong> | 
     5조 정예진 심재학 주재현 김지윤 김도현 김수경 이기찬 조민현
 </div>
 """, unsafe_allow_html=True)
