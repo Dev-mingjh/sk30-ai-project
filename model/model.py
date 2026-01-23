@@ -1,8 +1,10 @@
 import os
+from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
 
-from sklearn.model_selection import train_test_split
+from sklearn.metrics import classification_report
+from sklearn.model_selection import learning_curve, train_test_split, validation_curve
 from sklearn.compose import ColumnTransformer
 from sklearn.pipeline import Pipeline
 from sklearn.preprocessing import OneHotEncoder, StandardScaler
@@ -11,8 +13,10 @@ from sklearn.ensemble import RandomForestClassifier
 
 
 # 본인 컴퓨터의 파일 경로로 수정
-DATA_DIR = r"C:\Users\ez\Downloads\CICIDS2017_parquet"
-OUT_DIR  = r"C:\Users\ez\Downloads\CICIDS2017_models"
+# DATA_DIR = r"C:\Users\ez\Downloads\CICIDS2017_parquet"
+# OUT_DIR  = r"C:\Users\ez\Downloads\CICIDS2017_models"
+DATA_DIR = os.path.dirname(os.path.abspath(__file__))
+OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.makedirs(OUT_DIR, exist_ok=True)
 
 train_files = [
@@ -147,9 +151,95 @@ X_train, X_test, y_train, y_test = train_test_split(
 clf = Pipeline(steps=[
     ("preprocess", preprocess),
     ("model", RandomForestClassifier(
-        n_estimators=300,
+        n_estimators=300, # 나무의 개수 (많을 수록 좋지만 학습 속도가 느려짐)
+        max_depth=15,     # 과적합 방지를 위해 나무의 최대 깊이 제한 (너무 깊으면 과적합)
+        min_samples_split=10,     # 과적합 방지를 위해 추가
+        min_samples_leaf=5,       # 너무 세세하게 외우는 것 방지
         random_state=42,
-        n_jobs=-1,
-        class_weight="balanced_subsample"
+        n_jobs=-1, # 병렬 처리 (가용 CPU 모두 사용)
+        class_weight="balanced_subsample" # 클래스 가중치 주입
     ))
 ])
+
+#################################### 하이퍼 파라미터 분석 ###################################
+# [분석 모드] / [학습 모드] 스위치
+ANALYZE_MODE = True
+
+# --- [함수 1] 학습 곡선 (데이터 양에 따른 성능 변화) ---
+def plot_learning_curve(estimator, X, y, title="Learning Curve"):
+    print("학습 곡선 계산 중...")
+    train_sizes, train_scores, test_scores = learning_curve(
+        estimator, X, y, cv=3, n_jobs=-1, 
+        train_sizes=np.linspace(0.1, 1.0, 5),
+        scoring='f1_macro'
+    )
+
+    train_mean = np.mean(train_scores, axis=1)
+    train_std = np.std(train_scores, axis=1)
+    test_mean = np.mean(test_scores, axis=1)
+    test_std = np.std(test_scores, axis=1)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(train_sizes, train_mean, 'o-', color="r", label="Training score")
+    plt.fill_between(train_sizes, train_mean - train_std, train_mean + train_std, alpha=0.1, color="r")
+    plt.plot(train_sizes, test_mean, 'o-', color="g", label="Cross-validation score")
+    plt.fill_between(train_sizes, test_mean - test_std, test_mean + test_std, alpha=0.1, color="g")
+
+    plt.title(title)
+    plt.xlabel("Training Examples")
+    plt.ylabel("F1-Score (Macro)")
+    plt.legend(loc="best")
+    plt.grid()
+    plt.show()
+
+# --- [함수 2] 검증 곡선 (파라미터 값에 따른 성능 변화) ---
+def plot_validation_curve(estimator, X, y, param_name, param_range, title="Validation Curve"):
+    print("검증 곡선 계산 중...")
+    train_scores, test_scores = validation_curve(
+        estimator, X, y, 
+        param_name=param_name, 
+        param_range=param_range,
+        cv=3, scoring="f1_macro", n_jobs=-1
+    )
+
+    train_mean = np.mean(train_scores, axis=1)
+    train_std = np.std(train_scores, axis=1)
+    test_mean = np.mean(test_scores, axis=1)
+    test_std = np.std(test_scores, axis=1)
+
+    plt.figure(figsize=(10, 6))
+    plt.plot(param_range, train_mean, 'o-', color="r", label="Training score")
+    plt.fill_between(param_range, train_mean - train_std, train_mean + train_std, alpha=0.1, color="r")
+    plt.plot(param_range, test_mean, 'o-', color="g", label="Cross-validation score")
+    plt.fill_between(param_range, test_mean - test_std, test_mean + test_std, alpha=0.1, color="g")
+
+    plt.title(f"{title} ({param_name})")
+    plt.xlabel(param_name)
+    plt.ylabel("F1-Score (Macro)")
+    plt.legend(loc="best")
+    plt.grid()
+    plt.show()
+
+if ANALYZE_MODE:  
+    # 빠른 확인을 위한 샘플링 (경향성 확인에는 충분)
+    X_sample = X_train.sample(n=30000, random_state=42)
+    y_sample = y_train.loc[X_sample.index]
+
+    # 학습 곡선 시각화
+    plot_learning_curve(clf, X_sample, y_sample, "RF Learning Curve")
+
+    # 검증 곡선 시각화 (max_depth 최적값 찾기)
+    depth_range = [5, 10, 15, 20, 25]
+    plot_validation_curve(clf, X_sample, y_sample, "model__max_depth", depth_range)
+
+
+#################################### 모델 학습 ###################################
+if not ANALYZE_MODE:
+    # 모델 학습
+    print("모델 학습 중...")
+    clf.fit(X_train, y_train)
+
+    # 예측값 생성 및 Classification Report 출력 (Precision, Recall, F1-Score)
+    y_pred = clf.predict(X_test)
+    print("### Classification Report ###")
+    print(classification_report(y_test, y_pred))
