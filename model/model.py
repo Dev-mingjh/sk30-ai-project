@@ -152,11 +152,16 @@ X_train, X_test, y_train, y_test = train_test_split(
 clf = Pipeline(steps=[
     ("preprocess", preprocess),
     ("model", RandomForestClassifier(
-        n_estimators=300, # 나무의 개수 (많을 수록 좋지만 학습 속도가 느려짐)
-        max_depth=20,     # 과적합 방지를 위해 나무의 최대 깊이 제한 (너무 깊으면 과적합)
+        n_estimators=300, # 생성할 결정 나무의 개수 (많을 수록 좋지만 학습 속도가 느려짐) (default : 100)
+        max_depth=20,     # 나무의 최대 깊이 (너무 깊으면 과적합) (deafult : None)
         random_state=42,
-        n_jobs=-1, # 병렬 처리 (가용 CPU 모두 사용)
-        class_weight="balanced_subsample" # 클래스 가중치 주입
+        min_samples_split=2, # 노드를 분할하기 위해 필요한 최소 샘플 수 (클 수록 분할 제한 -> 모델 단순화) (default : 2)
+        min_samples_leaf=1, #말단 노드가 되기 위해 필요한 최소 샘플 수 (과적합 방지) (default : 1)
+        max_features="sqrt", #최적의 분할을 찾기 위해 고려할 피처의 개수 (default : 'sqrt')
+        min_impurity_decrease=0.0, #분할로 인해 감소해야 하는 불순도의 최소치로 이 값보다 이득이 적으면 분할 안 함 (default : 0.0)
+        ccp_alpha=0.0, #비용-복잡도 가지치기 파라미터 (0보다 크면 나무의 크기 감소) (default : 0.0)
+        n_jobs=-1,    #병렬 처리 (-1은 가용 CPU 모두 사용) (default : None)
+        class_weight="balanced_subsample" # 클래스 가중치 주입 (default : None)
     ))
 ])
 
@@ -231,7 +236,7 @@ if ANALYZE_MODE:
     plot_learning_curve(clf, X_sample, y_sample, "RF Learning Curve")
 
     # 검증 곡선 시각화 (max_depth 최적값 찾기)
-    depth_range = [16, 17, 18, 19, 20, 21, 22]
+    depth_range = [17, 18, 19, 20, 21]
     plot_validation_curve(clf, X_sample, y_sample, "model__max_depth", depth_range)
 #################################### 모델 학습 및 저장 ###################################
 if not ANALYZE_MODE:
