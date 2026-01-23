@@ -238,9 +238,6 @@ if ANALYZE_MODE:
 
 #################################### 모델 학습 및 저장 ###################################
 if not ANALYZE_MODE:
-    X_sample = X_train.sample(n=30000, random_state=42)
-    y_sample = y_train.loc[X_sample.index]
-
     # 모델 학습
     print("모델 학습 중...")
     clf.fit(X_train, y_train)
