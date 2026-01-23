@@ -13,9 +13,13 @@ python -m venv venv
 # 가상환경 활성화
 source venv/scripts/activate
 
-# 의존성 파일 설치( pipi install 한 패키지 requriements.txt에 추가해주세요)
+# 의존성 파일 설치( pip install 한 패키지 requriements.txt에 추가해주세요)
+# 추가하는법 ( python -c "import os; cur = set(open('requirements.txt').readlines()) if os.path.exists('requirements.txt') else set(); new = [l + '\n' for l in __import__('subprocess').check_output(['pip', 'freeze']).decode().splitlines() if l + '\n' not in cur]; open('requirements.txt', 'a').writelines(new)") 
 python -m pip install --upgrade pip
 pip install -r requirements.txt
+
+#  pip install 한 패키지 requriements.txt에 추가해주세요)
+python -c "import os; cur = set(open('requirements.txt').readlines()) if os.path.exists('requirements.txt') else set(); new = [l + '\n' for l in __import__('subprocess').check_output(['pip', 'freeze']).decode().splitlines() if l + '\n' not in cur]; open('requirements.txt', 'a').writelines(new)"
 
 ========================================================
 # 작업세팅
