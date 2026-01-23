@@ -21,7 +21,7 @@ pip install -r requirements.txt
 # 새로운 브랜치 생성 및 이동
 git checkout -b '브랜치 이름'
 
-# 변경된 모든 파일 스테이징
+# 파일 새로 작성 후 변경된 모든 파일 스테이징
 git add .
 
 # 커밋 메시지 작성
@@ -32,6 +32,9 @@ git push origin '브랜치 이름'
 
 # 각자 feature 브랜치 업데이트된 내용 동기화
 git checkout 'feature/(ui, ai, guide) or main'
+git pull origin 'feature/(ui, ai, guide) or main'
+
+# 현재 작업중인 branch 유지하면서 상위 브랜치 내용만 업데이트 하고싶은경우
 git pull origin 'feature/(ui, ai, guide) or main'
 ```
 
