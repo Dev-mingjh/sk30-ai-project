@@ -1,5 +1,23 @@
 >  각자 브랜치 작업하는 방법
 ```bash
+
+=======================================================
+# 환경 세팅
+# git 가져오는 법
+git clone -b [브랜치명] [저장소 URL]
+
+# 가상환경 생성
+python -m venv venv
+
+# 가상환경 활성화
+source venv/scripts/activate
+
+# 의존성 파일 설치( pipi install 한 패키지 requriements.txt에 추가해주세요)
+python -m pip install --upgrade pip
+pip install -r requirements.txt
+
+========================================================
+# 작업세팅
 # 새로운 브랜치 생성 및 이동
 git checkout -b '브랜치 이름'
 
