@@ -160,10 +160,9 @@ clf = Pipeline(steps=[
     ))
 ])
 
-#################################### 하이퍼 파라미터 분석 ###################################
 # [분석 모드] / [학습 모드] 스위치
 ANALYZE_MODE = True
-
+#################################### 하이퍼 파라미터 분석 ###################################
 # --- [함수 1] 학습 곡선 (현재 파라미터 기준, 데이터 양에 따른 성능 변화) ---
 def plot_learning_curve(estimator, X, y, title="Learning Curve"):
     print("학습 곡선 계산 중...")
@@ -232,10 +231,8 @@ if ANALYZE_MODE:
     plot_learning_curve(clf, X_sample, y_sample, "RF Learning Curve")
 
     # 검증 곡선 시각화 (max_depth 최적값 찾기)
-    depth_range = [5, 10, 15, 20, 25]
+    depth_range = [16, 17, 18, 19, 20, 21, 22]
     plot_validation_curve(clf, X_sample, y_sample, "model__max_depth", depth_range)
-
-
 #################################### 모델 학습 및 저장 ###################################
 if not ANALYZE_MODE:
     # 모델 학습
