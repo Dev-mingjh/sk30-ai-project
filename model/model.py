@@ -1,4 +1,5 @@
 import os
+import joblib
 from matplotlib import pyplot as plt
 import numpy as np
 import pandas as pd
@@ -157,13 +158,13 @@ clf = Pipeline(steps=[
         min_samples_leaf=5,       # 너무 세세하게 외우는 것 방지
         random_state=42,
         n_jobs=-1, # 병렬 처리 (가용 CPU 모두 사용)
-        class_weight="balanced_subsample" # 클래스 가중치 주입
+        class_weight="balanced" # 클래스 가중치 주입
     ))
 ])
 
 #################################### 하이퍼 파라미터 분석 ###################################
 # [분석 모드] / [학습 모드] 스위치
-ANALYZE_MODE = True
+ANALYZE_MODE = False
 
 # --- [함수 1] 학습 곡선 (데이터 양에 따른 성능 변화) ---
 def plot_learning_curve(estimator, X, y, title="Learning Curve"):
@@ -233,7 +234,7 @@ if ANALYZE_MODE:
     plot_validation_curve(clf, X_sample, y_sample, "model__max_depth", depth_range)
 
 
-#################################### 모델 학습 ###################################
+#################################### 모델 학습 및 저장 ###################################
 if not ANALYZE_MODE:
     # 모델 학습
     print("모델 학습 중...")
@@ -243,3 +244,16 @@ if not ANALYZE_MODE:
     y_pred = clf.predict(X_test)
     print("### Classification Report ###")
     print(classification_report(y_test, y_pred))
+
+    # 저장할 파일명 설정 (OUT_DIR)
+    model_filename = "cicids2017_rf_model_v1.pkl"
+    save_path = os.path.join(OUT_DIR, model_filename)
+
+    # 모델 저장 실행
+    print(f"모델을 저장 중입니다: {save_path}")
+    joblib.dump(clf, save_path)
+    print("모델 저장 완료!")
+
+    # 저장된 파일 크기 확인 (코랩 환경에서 용량 체크)
+    file_size = os.path.getsize(save_path) / (1024 * 1024)
+    print(f"모델 파일 크기: {file_size:.2f} MB")
