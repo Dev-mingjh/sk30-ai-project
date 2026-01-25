@@ -1,6 +1,7 @@
 import os
 from pathlib import Path
 
+import time
 import streamlit as st
 
 from rag.retriever import ChromaRetriever
@@ -8,8 +9,11 @@ from rag.generator import (
     AnswerGenerator,
     build_kisa_system,
     build_mitre_system,
+    build_recent_cases_system,
     format_evidence,
 )
+
+from rag.web_search.web_search import collect_web_evidence
 from rag.rag_engine import RAGEngine
 
 from rag.configs.env import load_env
@@ -22,6 +26,7 @@ from rag.configs.constants import (
     DEFAULT_OUT_DIR,
     DEFAULT_CHROMA_SUBDIR,
     ATTACK_LABELS,
+    LABEL_TO_ATTACK,
 )
 
 load_env()
@@ -49,6 +54,9 @@ ATTACK_TYPES = ATTACK_LABELS
 POSITIVE = ("네", "예", "필요", "해줘", "좋아", "응", "그래")
 NEGATIVE = ("아니", "아니오", "괜찮", "필요없", "필요 없어")
 
+# 선택지 키워드
+CHOICE_REPORT = ("신고절차", "신고 절차", "신고", "절차")
+CHOICE_MORE = ("최근 사례 설명", "사례", "최근 사례", "최근사례", "추가")
 
 # =========================================================
 # Streamlit UI
@@ -62,8 +70,12 @@ if "attack_type" not in st.session_state:
     st.session_state.attack_type = None
 if "explain_done" not in st.session_state:
     st.session_state.explain_done = False
-if "pending_report" not in st.session_state:
-    st.session_state.pending_report = False
+if "pending_choice" not in st.session_state:
+    st.session_state.pending_choice = False
+if "report_done" not in st.session_state:
+    st.session_state.report_done = False
+if "recent_done" not in st.session_state:
+    st.session_state.recent_done = False
 if "debug" not in st.session_state:
     st.session_state.debug = False
 
@@ -100,16 +112,15 @@ def render_messages():
         with st.chat_message(m["role"]):
             st.markdown(m["content"])
 
-
+# 챗팅 문장에서 공격 유형을 추출 (ATTACK_TYPES 기준 단순 포함 매칭)
 def extract_attack_type(text: str):
-    """채팅 문장에서 공격 유형을 추출 (ATTACK_TYPES 기준 단순 포함 매칭)."""
     t = (text or "").lower()
     for attack in ATTACK_TYPES:
         if attack.lower() in t:
             return attack
     return None
 
-
+# MITRE 기반 공격 특징/징후 설명 생성 + 응답 시간 출력 + 다음 선택지 안내
 def run_explain():
     if not st.session_state.attack_type:
         push("assistant", "먼저 공격 유형을 알려주세요. 예: DDoS, PortScan")
@@ -118,37 +129,56 @@ def run_explain():
     label = st.session_state.attack_type
     q = f"{label} 공격 유형의 핵심 특징을 시스템 포멧을 따라서 작성해줘"
 
+    # 라벨에 매핑된 Technique을 우선 사용
+    anchors = LABEL_TO_ATTACK.get(label, {}).get("anchor_techniques", []) or []
+
     with st.spinner("공격 유형 특징 작성중..."):
-        contexts = rag_mitre.retrieve(q, top_k=DEFAULT_TOP_K + 1, where=None)
-        if contexts:
-            anchor_techniques = sorted(
-                {
-                    c.get("metadata", {}).get("technique_id", "")
-                    for c in contexts
-                    if c.get("metadata", {}).get("technique_id")
+        start = time.perf_counter()
+
+        contexts = []
+
+        # Technique별로 “해당 Technique 근거”를 강제로 확보
+        if anchors:
+            for tid in anchors:
+                where = {
+                    "$and": [
+                        {"technique_id": tid},
+                        {"$or": [
+                            {"section": "Description"},
+                            {"section": "Detection"},
+                            {"section": "Mitigations"},
+                            {"section": "Procedure Examples"},
+                        ]},
+                    ]
                 }
-            )
-            mitre_evidence = format_evidence(contexts)
-            system = build_mitre_system(
-                attack_label=label,
-                anchor_techniques=", ".join(anchor_techniques),
-                mitre_evidence=mitre_evidence,
-            )
-            answer = rag_mitre.generate(q, contexts, system=system)
-        else:
-            answer = "문서 근거를 찾지 못했습니다."
+                ctxs = rag_mitre.retrieve(
+                    query=f"{label} {tid}",
+                    top_k=2,          # tid당 2개 정도면 충분히 MITRE가 녹음
+                    where=where,
+                    fallback=True,
+                )
+                contexts.extend(ctxs)
 
-    push("assistant", f"### 작성중 ({label})\n\n{answer}")
-    push("assistant", "신고 절차가 필요하신가요? 필요하면 '네'라고 답해주세요.")
-    st.session_state.pending_report = True
+        # 만약 technique 기반 검색이 거의 비었으면 기존 방식으로 보강
+        if not contexts:
+            contexts = rag_mitre.retrieve(q, top_k=DEFAULT_TOP_K + 2, where=None)
 
-    if st.session_state.debug:
-        push("assistant", f"**[DEBUG: mitre contexts={len(contexts)}]**")
-        push("assistant", f"**[DEBUG: chroma_dir={CHROMA_DIR}]**")
-        push("assistant", f"**[DEBUG: collections mitre={COLLECTION_MITRE_NAME}, kisa={COLLECTION_KISA_NAME}]**")
-        push("assistant", f"**[DEBUG: models embed={EMBED_MODEL}, gen={GEN_MODEL}]**")
+        mitre_evidence = format_evidence(contexts)
 
+        system = build_mitre_system(
+            attack_label=label,
+            anchor_techniques=", ".join(anchors) if anchors else "",
+            mitre_evidence=mitre_evidence,
+        )
 
+        answer = rag_mitre.generate(q, contexts, system=system) if contexts else "문서 근거를 찾지 못했습니다."
+        elapsed = time.perf_counter() - start
+
+    push("assistant", f"### 공격 유형 설명 ({label})\n\n{answer}\n\n_Response time: {elapsed:.2f}s_")
+    push("assistant", "원하시는 항목을 선택하세요: **'신고절차'** 또는 **'최근 사례'**")
+    st.session_state.pending_choice = True
+
+# KISA 기반 신고 절차 생성
 def run_report():
     if not st.session_state.attack_type:
         push("assistant", "먼저 공격 유형을 알려주세요. 예: DDoS, PortScan")
@@ -179,12 +209,51 @@ def run_report():
             answer = "문서 근거를 찾지 못했습니다."
 
     push("assistant", f"{title}\n\n{answer}")
+    st.session_state.report_done = True
+    st.session_state.pending_choice = False
 
     if st.session_state.debug:
         push("assistant", f"**[DEBUG: kisa contexts={len(contexts)}]**")
-        push("assistant", f"**[DEBUG: chroma_dir={CHROMA_DIR}]**")
-        push("assistant", f"**[DEBUG: collections mitre={COLLECTION_MITRE_NAME}, kisa={COLLECTION_KISA_NAME}]**")
-        push("assistant", f"**[DEBUG: models embed={EMBED_MODEL}, gen={GEN_MODEL}]**")
+
+# 웹서치 기반 최근 사례 요약 + 응답 시간 출력
+def run_recent_cases():
+    if not st.session_state.attack_type:
+        push("assistant", "먼저 공격 유형을 알려주세요. 예: DDoS, PortScan")
+        return
+
+    label = st.session_state.attack_type
+    q = f"{label} 최근 사례 요약을 생성해줘."
+
+    with st.spinner("최근 사례 검색 중..."):
+        start = time.perf_counter()
+
+        # 웹 증거 수집(최근 사례 2개)
+        web_evidence = collect_web_evidence(label, [], top_n=2)
+
+        system = build_recent_cases_system(
+            attack_label=label,
+            anchor_techniques="",
+            web_evidence=web_evidence,
+            top_n=2,
+        )
+
+        # 최근 사례는 RAG 컨텍스트 없이(system에 web_evidence 포함) 생성
+        answer = rag_mitre.generate(q, [], system=system)
+
+        elapsed = time.perf_counter() - start
+
+    push("assistant", f"### 최근 사례 ({label})\n\n{answer}\n\n_Response time: {elapsed:.2f}s_")
+    st.session_state.recent_done = True
+    st.session_state.pending_choice = False
+
+# 한 가지 출력 후, 아직 안 본 항목을 안내
+def prompt_other_if_needed():
+    if st.session_state.report_done and st.session_state.recent_done:
+        return
+    if st.session_state.report_done and not st.session_state.recent_done:
+        push("assistant", "최근 사례가 필요하면 **'최근 사례'**라고 입력해주세요.")
+    elif st.session_state.recent_done and not st.session_state.report_done:
+        push("assistant", "신고절차가 필요하면 **'신고절차'**라고 입력해주세요.")
 
 
 # 최초 안내 메시지
@@ -201,23 +270,37 @@ if user_text:
         st.markdown(user_text)
 
     detected_attack = extract_attack_type(user_text)
+
+    # 1) 공격 유형을 포함해서 입력한 경우 → 설명 생성
     if detected_attack:
         if detected_attack != st.session_state.attack_type:
             st.session_state.attack_type = detected_attack
             st.session_state.explain_done = False
-            st.session_state.pending_report = False
+            st.session_state.pending_choice = False
+            st.session_state.report_done = False
+            st.session_state.recent_done = False
         run_explain()
+
+    # 2) 공격 유형이 없는 입력 → 선택지 처리(신고/최근사례)
     else:
-        if st.session_state.pending_report:
-            if any(k in user_text for k in POSITIVE):
+        if st.session_state.pending_choice:
+            if any(k in user_text for k in CHOICE_REPORT):
                 run_report()
-                st.session_state.pending_report = False
-            elif any(k in user_text for k in NEGATIVE):
-                push("assistant", "알겠습니다. 필요하면 '신고절차'라고 말씀해주세요.")
-                st.session_state.pending_report = False
+                prompt_other_if_needed()
+            elif any(k in user_text for k in CHOICE_MORE):
+                run_recent_cases()
+                prompt_other_if_needed()
             else:
-                push("assistant", "신고 절차가 필요하면 '네', 아니면 '아니오'로 답해주세요.")
+                push("assistant", "원하시는 항목을 선택하세요: **'신고절차'** 또는 **'최근 사례'**")
         else:
-            push("assistant", "공격 유형을 포함해서 입력해주세요. 예: 'DDoS'")
+            # 대기 상태가 아니어도 사용자가 바로 신고절차/최근사례를 요구할 수 있으니 허용
+            if any(k in user_text for k in CHOICE_REPORT):
+                run_report()
+                prompt_other_if_needed()
+            elif any(k in user_text for k in CHOICE_MORE):
+                run_recent_cases()
+                prompt_other_if_needed()
+            else:
+                push("assistant", "공격 유형을 포함해 입력해주세요. 예: **'DDoS'**")
 
     st.rerun()

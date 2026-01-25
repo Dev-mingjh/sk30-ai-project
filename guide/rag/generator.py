@@ -4,7 +4,7 @@ from openai import OpenAI
 from rag.configs.env import get_openai_api_key
 from rag.configs.constants import DEFAULT_LLM_MODEL 
 
-from rag.prompts import MITRE_SYSTEM_TEMPLATE, KISA_SYSTEM_TEMPLATE
+from rag.prompts import MITRE_SYSTEM_TEMPLATE, KISA_SYSTEM_TEMPLATE, RECENT_CASES_TEMPLATE
 
 # contexts -> 프롬프트 컨텍스트 문자열
 # - 너무 길어지는 걸 방지하기 위해 max_chars로 컷
@@ -19,11 +19,33 @@ def format_context(contexts: list[dict[str, object]], max_chars: int = 12000) ->
         section = m.get("section", m.get("label", ""))
         attack = m.get("attack_type", "")
 
+        # 추가: MITRE 매칭에 필요한 핵심 필드
+        tid = m.get("technique_id", "")
+        ttitle = m.get("technique_title", "")
+        url = m.get("source_url", "")
+
         text = c.get("text", "")
-        blocks.append(f"[{src} p.{page} section={section} attack={attack}]\n{text}")
+
+        header = f"[{src}"
+        if tid:
+            header += f" tid={tid}"
+        if ttitle:
+            header += f" title={ttitle}"
+        if section:
+            header += f" section={section}"
+        if page != "":
+            header += f" page={page}"
+        if attack:
+            header += f" attack={attack}"
+        if url:
+            header += f" url={url}"
+        header += "]"
+
+        blocks.append(f"{header}\n{text}")
 
     joined = "\n\n---\n\n".join(blocks)
     return joined[:max_chars]
+
 
 # evidence 섹션용 컨텍스트 텍스트 구성
 def format_evidence(contexts: list[dict[str, object]], max_chars: int = 12000) -> str:
@@ -42,6 +64,19 @@ def build_kisa_system(attack_label: str, kisa_evidence: str) -> str:
     return KISA_SYSTEM_TEMPLATE.format(
         attack_label=attack_label,
         kisa_evidence=kisa_evidence,
+    )
+
+def build_recent_cases_system(
+    attack_label: str,
+    anchor_techniques: str,
+    web_evidence: str,
+    top_n: int = 3,
+) -> str:
+    return RECENT_CASES_TEMPLATE.format(
+        attack_label=attack_label,
+        anchor_techniques=anchor_techniques,
+        top_n=top_n,
+        web_evidence=web_evidence or "- 근거 부족",
     )
 
 # contexts + question -> 답변 생성
@@ -85,3 +120,4 @@ class AnswerGenerator:
             ],
         )
         return response.output_text
+

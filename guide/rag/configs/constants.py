@@ -46,7 +46,7 @@ LABEL_TO_ATTACK = {
         "notes": ["대용량 플러딩, 반사(reflection) 기반 DDoS 포함"],
     },
 
-    "DoS ": {
+    "DoS": {
         "behavior": "HTTP 연결을 장시간 유지하여 서버 자원을 고갈시키는 애플리케이션 계층 DoS 공격",
         "anchor_techniques": [
             "T1498",
@@ -90,7 +90,6 @@ LABEL_TO_ATTACK = {
             "T1110.002",
             "T1110.003",
             "T1110.004",
-            "T1595.003",
         ],
         "tactics": ["Credential Access"],
         "notes": [""],
@@ -98,7 +97,7 @@ LABEL_TO_ATTACK = {
 
     "BotNet": {
         "behavior": "감염된 호스트가 외부 명령제어 서버와 통신하는 봇넷 기반 행위",
-        "anchor_techniques": ["T1110.002"],
+        "anchor_techniques": ["T1071"],
         "tactics": ["Command and Control"],
         "notes": [
             "HTTP/HTTPS 기반 C2면 T1071.001, DNS면 T1071.004로 확장 가능"
@@ -114,7 +113,7 @@ LABEL_TO_ATTACK = {
             "T1190",
             "T1204",
         ],
-        "tactics": ["Exfiltration"],
+        "tactics": ["Initial Access", "Credential Access", "Execution", "Exfiltration"],
         "notes": [
             "CICIDS Infiltration은 lateral movement/collection과 혼재 가능"
         ],
@@ -131,22 +130,36 @@ LABEL_TO_ATTACK = {
 }
 
 LABEL_NORMALIZE_ALIASES = {
-    "DoS Slowloris": "DoS slowloris",
-    "dos slowloris": "DoS slowloris",
+    "DDOS" : "DDos",
+    "ddos" : "DDos",
+
+    "DoS": "DoS",
+    "dos": "DoS",
+
     "Port Scan": "PortScan",
-    "WebAttack-BruteForce": "Web Attack - Brute Force",
-    "Web Attack Brute Force": "Web Attack - Brute Force",
-    "FTP Patator": "FTP-Patator",
+    "protscan": "PortScan",
+    
+    "WebAttack": "Web Attack",
+    "Web Attack": "Web Attack",
+    
+    "Brute Force" : "Brute Force",
+    "bruteforce" : "Brute Force",
+    
+    "Bot": "BotNET",
+    "bot": "BotNET",
+    "botnet": "BotNET",
+
+    "infiltration": "Infiltration",
 }
 
 LABEL_TO_KISA_CATEGORY = {
-    "Web Attack - Brute Force": "계정탈취/인증공격",
-    "FTP-Patator": "계정탈취/인증공격",
+    "Web Attack": "계정탈취/인증공격",
+    "Brute Force" : "계정탈취/인증공격",
     "PortScan": "스캔/정찰",
     "DDoS": "서비스거부(DoS/DDoS)",
-    "DoS slowloris": "서비스거부(DoS/DDoS)",
+    "DoS": "서비스거부(DoS/DDoS)",
     "Infiltration": "침투/내부확산",
-    "Bot": "악성코드/봇넷",
+    "BotNet": "악성코드/봇넷",
     "BENIGN": "일반/정상",
 }
 
@@ -173,15 +186,10 @@ LABEL_KEYWORDS = {
 BASE_MITRE_URL = "https://attack.mitre.org"
 
 
-# 웹서치 시 우선 고려할 신뢰 출처(도메인 힌트)
+# web_search 신뢰 도메인 목록 
 TRUSTED_SOURCES = [
-    "attack.mitre.org",
-    "kisa.or.kr",
-    "cisa.gov",
-    "nvd.nist.gov",
-    "microsoft.com",
-    "cloudflare.com",
-    "akamai.com",
-    "crowdstrike.com",
-    "paloaltonetworks.com",
+    # 해외 사이버보안 뉴스
+    "https://www.darkreading.com/",
+    # 국내 사이버보안 뉴스
+    "https://www.boannews.com/",
 ]
