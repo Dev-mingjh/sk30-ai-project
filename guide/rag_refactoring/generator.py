@@ -1,4 +1,10 @@
 # LLM 응답 생성과 시스템 프롬프트 템플릿을 담당하는 Generator 모듈
+#--------------------------------------------------------------##
+## 수정사항 MEMO:
+# 0125: 최근 사례 출력 템플릿 추가(RECENTS_CASES_TEMPLATE)_이기찬
+#--------------------------------------------------------------##
+
+
 import os
 from typing import Any, Dict, List, Optional
 
@@ -33,16 +39,48 @@ MITRE_SYSTEM_TEMPLATE = """[ROLE]
 - 로그/트래픽/행동 단서 위주 불릿
 
 ━━━━━━━━━━━━━━━━━━━━
-Ⅱ. 연관 Technique 요약
+Ⅲ. 연관 Technique 요약
 ━━━━━━━━━━━━━━━━━━━━
 - Technique ID: 요약(1줄) (MITRE)
 
 [EVIDENCE]
 ### MITRE ATT&CK
 {mitre_evidence}
+"""
 
-[FINAL REMINDER]
-- 위 근거에 포함되지 않은 내용은 작성하지 마라.
+## 0125 수정: 최근 사례 출력 템플릿_이기찬
+## 최근사례 출력 템플릿_이기찬
+RECENT_CASES_TEMPLATE ="""
+[ROLE]
+너는 사이버 위협 인텔리전스(CTI) 분석가다. 제공된 근거만 사용해 최근 사례를 요약한다.
+
+[INCIDENT CONTEXT]
+- 공격 유형(Label): {attack_label}
+- 관련 MITRE ATT&CK Technique ID: {anchor_techniques}
+
+[INSTRUCTIONS]
+1. 반드시 [WEB EVIDENCE] 내용만 사용한다.
+2. 추측/과장 금지. 근거가 없으면 “근거 부족”이라고 명시한다.
+3. 사례는 최대 {top_n}개까지만 요약한다.
+4. 각 사례는 아래 형식을 지켜 출력한다.
+5. 모든 출력은 한국어로 한다.
+
+[OUTPUT FORMAT]
+━━━━━━━━━━━━━━━━━━━━
+ - 최근 사례 -
+━━━━━━━━━━━━━━━━━━━━
+
+[사례 1]
+- 제목:
+- 요약: (2~3문장)
+- 출처: URL 
+
+[사례 2]
+(최대 {top_n})
+
+[WEB EVIDENCE]
+{web_evidence}
+
 """
 
 KISA_SYSTEM_TEMPLATE = """[ROLE]
@@ -86,7 +124,6 @@ KISA_SYSTEM_TEMPLATE = """[ROLE]
 Ⅴ. 신고 이후 후속 대응
 ━━━━━━━━━━━━━━━━━━━━
 - 이후 처리/후속 협조 불릿
-
 [EVIDENCE]
 ### KISA 침해사고대응 안내서
 {kisa_evidence}
@@ -121,19 +158,37 @@ def format_evidence(contexts: List[Dict[str, Any]], max_chars: int = 12000) -> s
     """EVIDENCE 섹션용 컨텍스트 텍스트 구성."""
     return format_context(contexts, max_chars=max_chars)
 
-
-def build_mitre_system(attack_label: str, anchor_techniques: str, mitre_evidence: str) -> str:
+def build_mitre_system(
+    attack_label: str,
+    anchor_techniques: str,
+    mitre_evidence: str,
+) -> str:
     return MITRE_SYSTEM_TEMPLATE.format(
         attack_label=attack_label,
         anchor_techniques=anchor_techniques,
         mitre_evidence=mitre_evidence,
     )
 
-
+## 신고절차 템플릿에 내용추가하는 함수
 def build_kisa_system(attack_label: str, kisa_evidence: str) -> str:
     return KISA_SYSTEM_TEMPLATE.format(
         attack_label=attack_label,
         kisa_evidence=kisa_evidence,
+    )
+
+## 최근사례에 내용추가하는 함수_이기찬ㄴ
+def build_recent_cases_system(
+    attack_label: str,
+    anchor_techniques: str,
+    web_evidence: str,
+    top_n: int = 3,
+) -> str:
+    # [날짜 수정: 2026-01-25 최근 사례 전용 템플릿 함수 추가]_이기찬
+    return RECENT_CASES_TEMPLATE.format(
+        attack_label=attack_label,
+        anchor_techniques=anchor_techniques,
+        top_n=top_n,
+        web_evidence=web_evidence or "- 근거 부족",
     )
 
 class AnswerGenerator:
@@ -179,7 +234,6 @@ class AnswerGenerator:
 [컨텍스트]
 {ctx}
 """
-
         resp = self.oai.responses.create(
             model=self.gen_model,
             input=[
