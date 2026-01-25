@@ -2,6 +2,8 @@
 #--------------------------------------------------------------##
 ## 수정사항 MEMO:
 # 0125: 최근 사례 출력 템플릿 추가(RECENTS_CASES_TEMPLATE)_이기찬
+# 0125: KISA 대응 가이드 전용 템플릿을 추가합니다. (신고 절차와 분리)
+# 0125: 대응 가이드 전용 시스템 프롬프트를 생성하는 함수입니다.
 #--------------------------------------------------------------##
 
 
@@ -26,6 +28,8 @@ MITRE_SYSTEM_TEMPLATE = """[ROLE]
 4. 실무자가 바로 이해할 수 있도록 간결한 불릿으로 작성하라.
 5. 모든 출력은 한국어로 작성하라.
 6. 근거가 부족하면 “근거에서 확인 불가”라고 명시하라.
+7. 출력은 반드시 아래 [MARKDOWN OUTPUT] 형식을 그대로 지켜라.
+8. 절대 '____', '━━━', '====' 같은 문자로 구분선을 만들지 마라. 구분선은 오직 '---'만 사용하라.
 
 [OUTPUT FORMAT]
 ━━━━━━━━━━━━━━━━━━━━
@@ -36,16 +40,31 @@ MITRE_SYSTEM_TEMPLATE = """[ROLE]
 ━━━━━━━━━━━━━━━━━━━━
 Ⅱ. 관측 가능한 징후(Indicators)
 ━━━━━━━━━━━━━━━━━━━━
-- 로그/트래픽/행동 단서 위주 불릿
+- <불릿 1> 
+- <불릿 2> 
+- <불릿 3> 
 
 ━━━━━━━━━━━━━━━━━━━━
 Ⅲ. 연관 Technique 요약
 ━━━━━━━━━━━━━━━━━━━━
-- Technique ID: 요약(1줄) (MITRE)
+아래 표 형식으로만 작성하라.
+
+| Technique ID | Technique 이름 | 근거 기반 1줄 요약 |
+|---|---|---|
+| Txxxx | <이름> | <요약> |
+| Txxxx.xxx | <이름> | <요약> |
+
+- 표의 열이 더 필요하면 열을 양식에 맞게 추가해서 출력
+- 요약의 끝마디는 입니다로 설정
+- 표에 넣을 Technique이 없으면 표 대신 아래 1줄만 출력:
+  - **근거에서 확인 가능한 Technique 요약 없음**
 
 [EVIDENCE]
 ### MITRE ATT&CK
 {mitre_evidence}
+
+[FINAL REMINDER]
+- 위 근거에 포함되지 않은 내용은 작성하지 마라.
 """
 
 ## 0125 수정: 최근 사례 출력 템플릿_이기찬
@@ -145,13 +164,36 @@ def format_context(contexts: List[Dict[str, Any]], max_chars: int = 12000) -> st
         page = m.get("page", m.get("page_no", ""))
         section = m.get("section", m.get("label", ""))
         attack = m.get("attack_type", "")
+       
+        # ✅ 추가: MITRE 매칭에 필요한 핵심 필드
+        tid = m.get("technique_id", "")
+        ttitle = m.get("technique_title", "")
+        url = m.get("source_url", "")
 
-        blocks.append(
-            f"[{src} p.{page} section={section} attack={attack}]\n{c['text']}"
-        )
+        text = c.get("text", "")
 
-    text = "\n\n---\n\n".join(blocks)
-    return text[:max_chars]
+        header = f"[{src}"
+        if tid:
+            header += f" tid={tid}"
+        if ttitle:
+            header += f" title={ttitle}"
+        if section:
+            header += f" section={section}"
+        if page != "":
+            header += f" page={page}"
+        if attack:
+            header += f" attack={attack}"
+        if url:
+            header += f" url={url}"
+        header += "]"
+        blocks.append(f"{header}\n{text}")
+        # blocks.append(
+        #     f"[{src} p.{page} section={section} attack={attack}]\n{c['text']}")
+    joined = "\n\n---\n\n".join(blocks)
+    return joined[:max_chars]    
+
+    # text = "\n\n---\n\n".join(blocks)
+    # return text[:max_chars]
 
 
 def format_evidence(contexts: List[Dict[str, Any]], max_chars: int = 12000) -> str:
@@ -188,7 +230,7 @@ def build_recent_cases_system(
         attack_label=attack_label,
         anchor_techniques=anchor_techniques,
         top_n=top_n,
-        web_evidence=web_evidence or "- 근거 부족",
+        web_evidence=web_evidence ,
     )
 
 class AnswerGenerator:
@@ -242,3 +284,35 @@ class AnswerGenerator:
             ],
         )
         return resp.output_text
+    
+##0125: KISA 대응 가이드 전용 템플릿을 추가합니다. (신고 절차와 분리)
+KISA_GUIDE_SYSTEM_TEMPLATE = """[ROLE]
+너는 보안 대응 가이드 전문가다.
+공식 문서(KISA 대응 가이드) 근거만으로 기술적 대응 방안을 안내한다.
+
+[INCIDENT CONTEXT]
+- 공격 유형(Label): {attack_label}
+
+[INSTRUCTIONS]
+1. 반드시 아래 [GUIDE EVIDENCE]에 있는 내용만 근거로 작성한다.
+2. 신고 절차, 문의처, 피해지원 같은 행정 안내는 포함하지 않는다.
+3. 조치 항목은 실행 가능한 체크리스트 형태로 정리한다.
+4. 근거가 부족하면 "문서 근거 부족"을 명시한다.
+
+[OUTPUT FORMAT]
+### 기술 대응 가이드 ({attack_label})
+- 탐지/확인:
+- 즉시 조치(초동 대응):
+- 추가 대응/완화:
+- 사후 점검:
+
+[GUIDE EVIDENCE]
+{guide_evidence}
+"""
+
+# 0125: 대응 가이드 전용 시스템 프롬프트를 생성하는 함수입니다._이기찬
+def build_kisa_guide_system(attack_label: str, guide_evidence: str) -> str:
+    return KISA_GUIDE_SYSTEM_TEMPLATE.format(
+        attack_label=attack_label,
+        guide_evidence=guide_evidence,
+    )
