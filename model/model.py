@@ -27,6 +27,7 @@ train_files = [
     "Portscan-Friday-no-metadata.parquet",
     "Bruteforce-Tuesday-no-metadata.parquet",
     "DDoS-Friday-no-metadata.parquet",
+    "Infiltration-Thursday-no-metadata.parquet",
 ]
 paths = [os.path.join(DATA_DIR, f) for f in train_files]
 
@@ -76,6 +77,49 @@ df["label_big"] = df["Label"].apply(map_label_big)
 
 print("\n[label_big 분포(전체)]")
 print(df["label_big"].value_counts())
+
+# Infiltration 더미 데이터 증강 , 7개 → 200개로 약한 노이즈 증강, 정확한 분류가 아니라 존재 인식
+# 더 많은 더미 데이터 추가 또는 가중치, 임계값을 통한 recall 정확도 올리는 것은 오히려 왜곡이 발생함.
+# ------------------------------------------------------------------
+def augment_infiltration(df, target_size=200, noise_ratio=0.01, random_state=42):
+    np.random.seed(random_state)
+
+    if len(df) == 0:
+        return df
+
+    num_cols = df.select_dtypes(include=[np.number]).columns
+    augmented = []
+
+    while len(df) + len(augmented) < target_size:
+        sample = df.sample(1, replace=True)
+        noisy = sample.copy()
+
+        for col in num_cols:
+            std = df[col].std()
+            if pd.notna(std) and std > 0:
+                noisy[col] += np.random.normal(0, std * noise_ratio)
+
+        augmented.append(noisy)
+
+    return pd.concat([df] + augmented, ignore_index=True)
+
+# 원본 infiltration 분리
+infil_df = df[df["label_big"] == "Infiltration"].copy()
+print("\n원본 Infiltration 개수:", len(infil_df))
+
+# 증강 적용
+infil_aug = augment_infiltration(infil_df, target_size=200)
+print("증강 후 Infiltration 개수:", len(infil_aug))
+
+# 기존 infiltration 제거 후 교체
+df = df[df["label_big"] != "Infiltration"]
+df = pd.concat([df, infil_aug], ignore_index=True)
+
+print("\n[label_big 분포(증강 후)]")
+print(df["label_big"].value_counts())
+
+# ------------------------------------------------------------------------
+
 
 # 불균형 제거(1:1 비율)
 df["is_anomaly"] = (df["label_big"] != "Benign").astype(int)
