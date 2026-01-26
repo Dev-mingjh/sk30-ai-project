@@ -1,5 +1,4 @@
 # JSONL -> Chroma 업서트 스키마 변환 모듈
-
 from .configs.constants import LABEL_TO_KISA_CATEGORY
 from .utils.normalize import normalize_label
 
@@ -42,7 +41,7 @@ def normalize_mitre(items: list[dict[str, object]]) -> list[dict[str, object]]:
 
     return docs
 
-# KISA JSONL 항목들을 Chroma 업서트용 docs 리스트로 변환
+# KISA 신고절차 JSONL 항목들을 Chroma 업서트용 docs 리스트로 변환
 def normalize_kisa(items: list[dict[str, object]]) -> list[dict[str, object]]:
     docs: list[dict[str, object]] = []
 
@@ -69,6 +68,33 @@ def normalize_kisa(items: list[dict[str, object]]) -> list[dict[str, object]]:
                     "label": norm_label,
                     "kisa_category": kisa_category,
                     "section": x.get("section", ""),
+                    "page_no": page_no,
+                    "source_doc": x.get("source_doc", ""),
+                },
+            }
+        )
+
+    return docs
+
+# KISA 대응가이드 JSONL 항목을 Chroma 업서트용 docs 리스트로 변환
+def normalize_kisa_guide(items: list[dict[str, object]]) -> list[dict[str, object]]:
+    docs: list[dict[str, object]] = []
+
+    for x in items:
+        raw_label = x.get("label", "")
+        norm_label = normalize_label(raw_label) if raw_label else raw_label
+
+        raw_page = x.get("page_no", -1)
+        page_no = int(raw_page) if str(raw_page).isdigit() else -1
+
+        docs.append(
+            {
+                "id": x["chunk_id"],
+                "text": x.get("text", ""),
+                "meta": {
+                    "source": "KISA_GUIDE",
+                    "label": norm_label,
+                    "section": x.get("section", "kisa_guide_response"),
                     "page_no": page_no,
                     "source_doc": x.get("source_doc", ""),
                 },
