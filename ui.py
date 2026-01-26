@@ -12,9 +12,9 @@ import seaborn as sns
 # ============================================================
 # 1. 초기 설정 및 환경 변수
 # ============================================================
-load_dotenv()
-OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-client = OpenAI(api_key=OPENAI_API_KEY)
+# load_dotenv()
+# OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+# client = OpenAI(api_key=OPENAI_API_KEY)
 
 
 def init_settings():
@@ -99,38 +99,38 @@ def display_chat_messages():
 # ============================================================
 # 3. 비즈니스 로직 함수
 # ============================================================
-def handle_ai_chat(prompt, chat_container):
-    """OpenAI API 호출 및 스트리밍 응답 처리"""
-    st.session_state.messages.append({"role": "user", "content": prompt})
+# def handle_ai_chat(prompt, chat_container):
+#     """OpenAI API 호출 및 스트리밍 응답 처리"""
+#     st.session_state.messages.append({"role": "user", "content": prompt})
     
-    with chat_container:
-        with st.chat_message("user"):
-            st.markdown(prompt)
+#     with chat_container:
+#         with st.chat_message("user"):
+#             st.markdown(prompt)
 
-        with st.chat_message("assistant"):
-            message_placeholder = st.empty()
-            full_response = ""
+#         with st.chat_message("assistant"):
+#             message_placeholder = st.empty()
+#             full_response = ""
             
-            try:
-                system_msg = {"role": "system", "content": "너는 네트워크 보안 전문가야. 로그 분석 결과와 보안 위협에 대해 전문적으로 답변해줘."}
-                completion = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[system_msg] + [
-                        {"role": m["role"], "content": m["content"]}
-                        for m in st.session_state.messages
-                    ],
-                    stream=True,
-                )
+#             try:
+#                 system_msg = {"role": "system", "content": "너는 네트워크 보안 전문가야. 로그 분석 결과와 보안 위협에 대해 전문적으로 답변해줘."}
+#                 completion = client.chat.completions.create(
+#                     model="gpt-4o-mini",
+#                     messages=[system_msg] + [
+#                         {"role": m["role"], "content": m["content"]}
+#                         for m in st.session_state.messages
+#                     ],
+#                     stream=True,
+#                 )
 
-                for response in completion:
-                    full_response += (response.choices[0].delta.content or "")
-                    message_placeholder.markdown(full_response + "▌")
+#                 for response in completion:
+#                     full_response += (response.choices[0].delta.content or "")
+#                     message_placeholder.markdown(full_response + "▌")
                 
-                message_placeholder.markdown(full_response)
-                st.session_state.messages.append({"role": "assistant", "content": full_response})
+#                 message_placeholder.markdown(full_response)
+#                 st.session_state.messages.append({"role": "assistant", "content": full_response})
             
-            except Exception as e:
-                st.error(f"OpenAI API 오류가 발생했습니다: {e}")
+#             except Exception as e:
+#                 st.error(f"OpenAI API 오류가 발생했습니다: {e}")
 
 def render_dashboard():
     with st.expander("🚨 로그 요약 및 대시보드", expanded=True):
