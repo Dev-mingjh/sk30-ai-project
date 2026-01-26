@@ -39,9 +39,14 @@ def add_pred_column(input_csv_path, output_csv_path, pred_col="attack_type"):
     return output_csv_path
 
 if __name__ == "__main__":
+    csvName = 'Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX'
+    current_dir = os.path.dirname(os.path.abspath(__file__))
+    input_csv = os.path.join(current_dir, csvName+'.csv')
+    output_csv = os.path.join(current_dir, csvName+'_output.csv')
+
     out = add_pred_column(
-    input_csv_path="output.csv",
-    output_csv_path="user_log_with_pred.csv",
-    pred_col="attack_type",
+        input_csv_path=input_csv,
+        output_csv_path=output_csv,
+        pred_col="attack_type",
     )
     print("DONE:", out)
