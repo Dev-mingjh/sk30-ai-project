@@ -1,0 +1,10 @@
+streamlit
+pandas
+matplotlib
+openai
+python-dotenv
+beautifulsoup4
+PyMuPDF
+chromadb
+joblib
+scikit-learn
