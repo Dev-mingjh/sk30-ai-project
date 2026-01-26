@@ -8,3 +8,4 @@ PyMuPDF
 chromadb
 joblib
 scikit-learn
+seaborn

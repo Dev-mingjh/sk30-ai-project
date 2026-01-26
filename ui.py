@@ -6,6 +6,8 @@ from dotenv import load_dotenv
 from openai import OpenAI
 from guide import *
 from model import infer
+import matplotlib.pyplot as plt
+import seaborn as sns
 
 # ============================================================
 # 1. 초기 설정 및 환경 변수
@@ -87,7 +89,7 @@ def apply_custom_css():
 def display_chat_messages():
     # 초기 안내
     if not st.session_state.messages:
-        push_msg("assistant", "안녕하세요! 어떤 공격 유형에 대해 도움이 필요하신가요? (예: DDoS, PortScan)")
+        push_msg("assistant", "안녕하세요.   분석할 로그 파일을 업로드 해주세요")
         st.rerun()
     # 채팅 기록 표시
     for msg in st.session_state.messages:
@@ -131,36 +133,33 @@ def handle_ai_chat(prompt, chat_container):
                 st.error(f"OpenAI API 오류가 발생했습니다: {e}")
 
 def render_dashboard():
-    """우측 하단 플로팅 대시보드 렌더링"""
     with st.expander("🚨 로그 요약 및 대시보드", expanded=True):
-        if st.session_state.df is not None:
-            df = st.session_state.df
-            m1, m2 = st.columns(2)
-            m1.metric("전체 로그", f"{len(df):,}건")
-            
-            if 'label' in df.columns:
-                threat_df = df[~df['label'].str.contains('Normal', case=False, na=False)]
-                threat_count = len(threat_df)
-                m2.metric("위협 감지", f"{threat_count}건", delta=f"{threat_count}건", delta_color="inverse")
-                
+        df = st.session_state.df
+        if df is None:
+            st.info("로그 파일을 업로드하면 실시간 요약이 활성화됩니다.")
+            return
+
+        c1, c2 = st.columns(2)
+        c1.metric("전체 로그", f"{len(df):,}건")
+
+        if "attack_type" in df.columns:
+            threat_df = df[df["attack_type"].str.lower() != "benign"]
+
+            c2.metric(
+                "위협 감지",
+                f"{len(threat_df)}건",
+                delta_color="inverse"
+            )
+
+            if len(threat_df) > 0:
                 st.divider()
-                if threat_count > 0:
-                    st.write("⚠️ **주요 위협 탐지 위치:**")
-                    indices = threat_df.index.tolist()
-                    idx_display = ", ".join([f"#{i+1}" for i in indices[:5]])
-                    if len(indices) > 5: idx_display += " 등..."
-                    st.error(f"**로그 라인:** {idx_display}")
-                    
-                    st.write("📝 **위협 유형별 요약:**")
-                    summary = threat_df['label'].value_counts()
-                    for label, count in summary.items():
-                        st.write(f"- {label}: {count}건")
-                else:
-                    st.success("✅ 현재 모든 로그가 정상 범위 내에 있습니다.")
+                st.write("🧨 **공격 유형 분포**")
+
+                for k, v in threat_df["attack_type"].value_counts().items():
+                    st.write(f"- {k}: {v}건")
             else:
-                st.warning("'label' 컬럼을 찾을 수 없습니다.")
-        else:
-            st.info("로그 파일을 업로드하면 실시간 요약이 활성화됩니다.\n 모델 연결 후 수정 필요")
+                st.success("✅ 모든 트래픽이 정상(Benign)입니다.")
+
 
 def set_sidebar():
     """사이드바 정보 표시"""
@@ -180,7 +179,7 @@ def set_sidebar():
 def set_header():
     # 헤더 영역
     st.markdown('<div class="main-header">🛡️ 네트워크 로그 이상 징후 탐지 시스템</div>', unsafe_allow_html=True)
-    st.markdown('<div class="sub-header">ML 기반 보안 위협 탐지 및 대응 가이드</div>', unsafe_allow_html=True)
+    st.markdown('<div class="sub-header">※ PCAP/패킷 로그를 CICFlowMeter로 변환한 flow-level feature CSV 파일만 지원합니다 ※</div>', unsafe_allow_html=True)
 
 
 def set_putter():
@@ -204,7 +203,7 @@ def set_chat_upload():
         
         with col_input:
             if prompt := st.chat_input("메시지를 입력하세요..."):
-                handle_input(prompt, rag_mitre, rag_kisa)
+                handle_input(prompt)
                 #handle_ai_chat(prompt, chat_container)
                 st.rerun()
 
@@ -225,25 +224,67 @@ def set_chat_upload():
                     
                     st.toast("✅ 모델 예측 완료", icon="🤖")
 
-                    # 메시지 추가
+                    attacks = df['attack_type'].unique()
+                    content = f'`{uploaded_file.name}` 분석 완료\n\n 로그 분석 결과 입니다'
+                    
+                    if len(attacks) == 1:
+                        cotent += "악성 로그가 탐지 되지 않았습니다."
+                    else: 
+                        content += '탐지된 악성 공격 리스트 입니다\n\n'
+                        for num in range(len(attacks)):
+                            if attacks[num] != 'Benign':
+                                content += f'{num}. {attacks[num]}\n\n'
+                        content += "상세 설명 원하시는 공격이 있을 경우 입력해주세요"
+                        # 메시지 추가
                     st.session_state.messages.append({
                         "role": "assistant",
-                        "content": f"📎 `{uploaded_file.name}` 분석 완료 (attack_type 생성)"
+                        "content": content,
                     })
-
+                    # visualize(df)
                     # 현재 파일 이름을 기록하여 다음 리런 때 중복 실행 방지
                     st.session_state.last_processed_file = uploaded_file.name
                     
                     # 상태 업데이트 후 화면 갱신
                     st.rerun()
 
+def visualize(df):
+    # 컬럼명 자동 지정 (마지막 컬럼이 attack_type인 경우)
+    target_col = df.columns[-1]
+    counts = df[target_col].value_counts()
+
+    # 2. 시각화 설정 (Figure 객체 생성)
+    fig, ax = plt.subplots(figsize=(10, 6))
+
+    # 3. Seaborn 막대 그래프 그리기
+    sns.barplot(
+        x=counts.index, 
+        y=counts.values, 
+        ax=ax, 
+        hue=counts.index,     # x축 변수를 hue에도 똑같이 지정
+        palette='viridis',    # 사용할 색상 팔레트
+        legend=False          # hue를 쓰면 자동으로 생기는 범례를 숨김
+    )   
+
+    # 4. Y축을 로그 스케일로 설정 (가장 중요한 부분)
+    ax.set_yscale("log")
+
+    # 5. 그래프 디테일 추가
+    ax.set_title(f'Log-Scaled Distribution of {target_col}', fontsize=14)
+    ax.set_xlabel('Attack Type', fontsize=12)
+    ax.set_ylabel('Count (Log Scale)', fontsize=12)
+    plt.xticks(rotation=45) # 라벨이 겹치지 않게 회전
+
+    # 그래프 상단에 실제 수치 표시 (선택 사항)
+    for i, v in enumerate(counts.values):
+        ax.text(i, v, f'{v:,}', ha='center', va='bottom', fontsize=10)
+
+    # 6. Streamlit 출력
+    st.pyplot(fig)
 
 def execute_chatbot():
     init_settings()
     apply_custom_css()
     set_header()
     set_chat_upload()
-    render_dashboard()
     set_sidebar()
     set_putter()
-    

@@ -4,7 +4,7 @@ from openai import OpenAI
 from rag.configs.env import get_openai_api_key
 from rag.configs.constants import DEFAULT_LLM_MODEL 
 
-from rag.prompts import MITRE_SYSTEM_TEMPLATE, KISA_SYSTEM_TEMPLATE, RECENT_CASES_TEMPLATE
+from rag.prompts import MITRE_SYSTEM_TEMPLATE, KISA_SYSTEM_TEMPLATE, RECENT_CASES_TEMPLATE, KISA_GUIDE_SYSTEM_TEMPLATE
 
 # contexts -> 프롬프트 컨텍스트 문자열
 # - 너무 길어지는 걸 방지하기 위해 max_chars로 컷
@@ -60,10 +60,16 @@ def build_mitre_system(attack_label: str, anchor_techniques: str, mitre_evidence
     )
 
 
-def build_kisa_system(attack_label: str, kisa_evidence: str) -> str:
+def build_kisa_report_system(attack_label: str, kisa_evidence: str) -> str:
     return KISA_SYSTEM_TEMPLATE.format(
         attack_label=attack_label,
         kisa_evidence=kisa_evidence,
+    )
+
+def build_kisa_guide_system(attack_label: str, guide_evidence: str) -> str:
+    return KISA_GUIDE_SYSTEM_TEMPLATE.format(
+        attack_label=attack_label,
+        guide_evidence=guide_evidence,
     )
 
 def build_recent_cases_system(
@@ -120,4 +126,3 @@ class AnswerGenerator:
             ],
         )
         return response.output_text
-

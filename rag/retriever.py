@@ -31,12 +31,13 @@ class ChromaRetriever:
         if not api_key:
             raise ValueError("OPENAI_API_KEY(또는 OPEN_API_KEY)가 .env에 설정되어 있지 않습니다.")
 
-        self.oai = OpenAI(api_key=api_key)
+        self.openai = OpenAI(api_key=api_key)
         self.client = chromadb.PersistentClient(path=chroma_dir)
-        self.col = self.client.get_collection(collection_name)
+        # 컬렉션이 아직 없을 수 있으므로 get_or_create를 사용해 NotFoundError 방지
+        self.col = self.client.get_or_create_collection(collection_name)
 
     def embed_query(self, query: str) -> list[float]:
-        emb = self.oai.embeddings.create(model=self.embed_model, input=query)
+        emb = self.openai.embeddings.create(model=self.embed_model, input=query)
         return emb.data[0].embedding
 
     def retrieve(
@@ -77,3 +78,4 @@ class ChromaRetriever:
         for d, m, dist in zip(docs, metas, dists):
             contexts.append({"text": d, "metadata": m or {}, "distance": dist})
         return contexts
+
