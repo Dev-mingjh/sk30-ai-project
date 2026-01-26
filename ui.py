@@ -5,9 +5,11 @@ import os
 from dotenv import load_dotenv
 from openai import OpenAI
 from guide import *
+from analyze import *
 from model import infer
 import matplotlib.pyplot as plt
 import seaborn as sns
+import time
 
 # ============================================================
 # 1. 초기 설정 및 환경 변수
@@ -16,6 +18,10 @@ import seaborn as sns
 # OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
 # client = OpenAI(api_key=OPENAI_API_KEY)
 
+@st.cache_data
+def convert_df_to_csv(df):
+    # 중요: 대용량 파일일 경우 encoding='utf-8-sig'를 사용해야 한글 깨짐이 없습니다.
+    return df.to_csv(index=False).encode('utf-8-sig')
 
 def init_settings():
     """페이지 설정 및 세션 상태 초기화"""
@@ -95,6 +101,16 @@ def display_chat_messages():
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
             st.markdown(msg["content"])
+            # 분석 결과 보고서 메시지일 경우 다운로드 버튼 노출
+            if msg.get("is_report") and st.session_state.df is not None:
+                csv_data = convert_df_to_csv(st.session_state.df)
+                st.download_button(
+                    label="📥 분석 결과 리포트 다운로드 (CSV)",
+                    data=csv_data,
+                    file_name=f"analysis_result_{st.session_state.last_processed_file}",
+                    mime="text/csv",
+                    key=f"download_btn_{st.session_state.last_processed_file}" # 키 중복 방지
+                )
 
 # ============================================================
 # 3. 비즈니스 로직 함수
@@ -191,7 +207,7 @@ def set_putter():
         """, unsafe_allow_html=True)
 
 def set_chat_upload():
-     # 1. 메인 채팅 영역
+    # 1. 메인 채팅 영역
     chat_container = st.container()
     with chat_container:
         display_chat_messages()
@@ -204,7 +220,6 @@ def set_chat_upload():
         with col_input:
             if prompt := st.chat_input("메시지를 입력하세요..."):
                 handle_input(prompt)
-                #handle_ai_chat(prompt, chat_container)
                 st.rerun()
 
         with col_upload:
@@ -213,40 +228,40 @@ def set_chat_upload():
                 if "last_processed_file" not in st.session_state:
                     st.session_state.last_processed_file = None
 
-                # 현재 업로드된 파일이 이전에 처리한 파일과 다를 때만 실행
                 if st.session_state.last_processed_file != uploaded_file.name:
-                    st.session_state.df = pd.read_csv(uploaded_file)
+                    raw_df = pd.read_csv(uploaded_file)
                     st.toast(f"✅ {uploaded_file.name} 로드 완료!", icon="📄")
                     
-                    # 모델 예측 실행
-                    df = infer.predict_attack_type(st.session_state.df)
-                    st.session_state.df = df
+                    with st.spinner("모델 분석 중..."):
+                        # 여기서 변수명을 predicted_df로 받았습니다.
+                        predicted_df = infer.predict_attack_type(raw_df)
                     
+                    # 세션에 저장
+                    st.session_state.df = predicted_df
                     st.toast("✅ 모델 예측 완료", icon="🤖")
 
-                    attacks = df['attack_type'].unique()
-                    content = f'`{uploaded_file.name}` 분석 완료\n\n 로그 분석 결과 입니다'
+                    attacks = predicted_df['attack_type'].unique()
+                    content = f'`{uploaded_file.name}` 분석 완료\n\n'
                     
-                    if len(attacks) == 1:
-                        cotent += "악성 로그가 탐지 되지 않았습니다."
+                    if len(attacks) <= 1 and attacks[0] == 'Benign':
+                        content += "✅ 악성 로그가 탐지되지 않았습니다."
                     else: 
-                        content += '탐지된 악성 공격 리스트 입니다\n\n'
-                        for num in range(len(attacks)):
-                            if attacks[num] != 'Benign':
-                                content += f'{num}. {attacks[num]}\n\n'
-                        content += "상세 설명 원하시는 공격이 있을 경우 입력해주세요"
-                        # 메시지 추가
+                        content += '🧨 **탐지된 악성 공격 리스트:**\n\n'
+                        for atk in attacks:
+                            if atk != 'Benign':
+                                # 수정된 부분: df 대신 predicted_df 사용
+                                count = len(predicted_df[predicted_df['attack_type'] == atk])
+                                content += f'- {atk} ({count}건)\n'
+                        content += "\n상세 설명이 필요한 공격명을 입력하시거나, 아래 버튼을 눌러 전체 결과(CSV)를 다운로드하세요."
+
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": content,
+                        "is_report": True
                     })
-                    # visualize(df)
-                    # 현재 파일 이름을 기록하여 다음 리런 때 중복 실행 방지
-                    st.session_state.last_processed_file = uploaded_file.name
                     
-                    # 상태 업데이트 후 화면 갱신
+                    st.session_state.last_processed_file = uploaded_file.name
                     st.rerun()
-
 def visualize(df):
     # 컬럼명 자동 지정 (마지막 컬럼이 attack_type인 경우)
     target_col = df.columns[-1]
@@ -280,6 +295,71 @@ def visualize(df):
 
     # 6. Streamlit 출력
     st.pyplot(fig)
+
+def handle_input(user_text):
+    push_msg("user", user_text)
+
+    # 모든 도구 통합
+    import guide
+    integrated_tools = guide.TOOLS + ANALYZE_TOOLS
+
+    # 1단계: 의도 파악 및 도구 호출 결정
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system", 
+                "content": (
+                    "당신은 네트워크 보안 전문가입니다. "
+                    "1. '내 파일', '내 로그', '이 데이터' 등 업로드된 파일 내용을 묻는 경우 'analyze_user_file'을 호출하세요. "
+                    "2. 그런 언급 없이 일반적인 정의나 대응 방법을 물으면 가이드(guide) 관련 함수를 호출하세요. "
+                    "3. analyze_user_file의 결과(JSON)를 받으면, 수치를 나열하지 말고 'Flow Packets/s가 매우 높아 플러딩 공격으로 의심된다'는 식으로 전문가답게 해석해 답변하세요."
+                )
+            },
+            *st.session_state.messages
+        ],
+        tools=integrated_tools,
+        tool_choice="auto",
+    )
+
+    msg = response.choices[0].message
+
+    if msg.tool_calls:
+        tool_call = msg.tool_calls[0]
+        fn_name = tool_call.function.name
+        fn_args = json.loads(tool_call.function.arguments)
+
+        with st.spinner(f"분석 중: {fn_name}..."):
+            if fn_name == "analyze_user_file":
+                # 1. 데이터 분석 실행
+                raw_analysis = analyze_user_file_stats(fn_args["attack_type"])
+                
+                # 2. 2단계 호출: 데이터를 AI에게 강력하게 주입
+                # AI에게 '나열하지 말고 해석해라'는 지시를 한 번 더 강조합니다.
+                second_response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "당신은 제공된 통계 데이터를 기반으로 근거를 제시하는 보안 분석가입니다. '현상 나열'이 아니라 '데이터 기반 해석'을 하세요."},
+                        *st.session_state.messages,
+                        msg,
+                        {
+                            "role": "tool", 
+                            "tool_call_id": tool_call.id, 
+                            "name": fn_name, 
+                            "content": f"이것은 실제 파일에서 추출한 데이터입니다. 수치(평균, 최대값)를 언급하며 DDoS/DoS 등의 근거를 설명하세요: {raw_analysis['answer']}"
+                        }
+                    ]
+                )
+                final_answer = second_response.choices[0].message.content
+            else:
+                # 일반 가이드 (기존 로직)
+                result = guide.FUNCTION_MAP[fn_name](fn_args)
+                final_answer = result['answer']
+        push("assistant", final_answer)
+    else:
+        push("assistant", msg.content)
+    
+    st.rerun()
 
 def execute_chatbot():
     init_settings()
