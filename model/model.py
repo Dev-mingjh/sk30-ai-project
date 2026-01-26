@@ -16,7 +16,8 @@ from sklearn.ensemble import RandomForestClassifier
 # 본인 컴퓨터의 파일 경로로 수정
 # DATA_DIR = r"C:\Users\ez\Downloads\CICIDS2017_parquet"
 # OUT_DIR  = r"C:\Users\ez\Downloads\CICIDS2017_models"
-DATA_DIR = os.path.dirname(os.path.abspath(__file__))
+current_dir = os.path.dirname(os.path.abspath(__file__))
+DATA_DIR = os.path.join(current_dir, "train_data")
 OUT_DIR = os.path.dirname(os.path.abspath(__file__))
 os.makedirs(OUT_DIR, exist_ok=True)
 

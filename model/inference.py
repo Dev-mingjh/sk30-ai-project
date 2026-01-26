@@ -44,10 +44,10 @@ def add_pred_column(input_csv_path, output_csv_path, pred_col="attack_type"):
     return output_csv_path
 
 if __name__ == "__main__":
-    csvName = 'Friday-WorkingHours-Afternoon-PortScan.pcap_ISCX'
+    csvName = 'DoS-Hulk_benign.pcap'
     current_dir = os.path.dirname(os.path.abspath(__file__))
-    input_csv = os.path.join(current_dir, csvName+'.csv')
-    output_csv = os.path.join(current_dir, csvName+'_output.csv')
+    input_csv = os.path.join(current_dir, "test_data", "before", csvName + '.csv')
+    output_csv = os.path.join(current_dir, "test_data", "after", csvName+'_output.csv')
 
     out = add_pred_column(
         input_csv_path=input_csv,
