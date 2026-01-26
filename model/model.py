@@ -161,7 +161,7 @@ clf = Pipeline(steps=[
 ])
 
 # 분석 모드 / 학습 모드
-ANALYZE_MODE = True
+ANALYZE_MODE = False
 # 학습 곡선 (현재 파라미터 기준, 데이터 양에 따른 성능 변화)
 def plot_learning_curve(estimator, X, y, title="Learning Curve"):
     print("학습 곡선 계산 중...")
