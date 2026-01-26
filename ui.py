@@ -246,3 +246,4 @@ def execute_chatbot():
     render_dashboard()
     set_sidebar()
     set_putter()
+    
