@@ -173,7 +173,7 @@ def ui():
     # 2. 하단 입력 및 파일 업로드 영역
     input_area = st.container()
     with input_area:
-        col_input, col_upload = st.columns([9, 1])
+        col_input, col_upload = st.columns([9.5, 0.5])
         
         with col_input:
             if prompt := st.chat_input("보안 위협 질문 입력..."):
