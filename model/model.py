@@ -70,6 +70,8 @@ def map_label_big(x):
     # Bruteforce
     if "brute" in s or "patator" in s:
         return "BruteForce"
+    if "infiltration" in s:
+        return "Infiltration"
     return "OtherAttack"
 
 
@@ -78,9 +80,7 @@ df["label_big"] = df["Label"].apply(map_label_big)
 print("\n[label_big 분포(전체)]")
 print(df["label_big"].value_counts())
 
-# Infiltration 더미 데이터 증강 , 7개 → 200개로 약한 노이즈 증강, 정확한 분류가 아니라 존재 인식
-# 더 많은 더미 데이터 추가 또는 가중치, 임계값을 통한 recall 정확도 올리는 것은 오히려 왜곡이 발생함.
-# ------------------------------------------------------------------
+# Infiltration 더미 데이터 증강, 7개 → 200개로 약한 노이즈 증강
 def augment_infiltration(df, target_size=200, noise_ratio=0.01, random_state=42):
     np.random.seed(random_state)
 
@@ -117,9 +117,6 @@ df = pd.concat([df, infil_aug], ignore_index=True)
 
 print("\n[label_big 분포(증강 후)]")
 print(df["label_big"].value_counts())
-
-# ------------------------------------------------------------------------
-
 
 # 불균형 제거(1:1 비율)
 df["is_anomaly"] = (df["label_big"] != "Benign").astype(int)
@@ -284,7 +281,7 @@ if not ANALYZE_MODE:
     print(classification_report(y_test, y_pred))
 
     # 저장할 파일명 설정 (OUT_DIR)
-    model_filename = "cicids2017_rf_model_v1.pkl"
+    model_filename = "cicids2017_rf_model_v2.pkl"
     save_path = os.path.join(OUT_DIR, model_filename)
 
     # 모델 저장 실행

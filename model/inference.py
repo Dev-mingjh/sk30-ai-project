@@ -5,7 +5,7 @@ import pandas as pd
 DROP_COLS = ["Label", "label_big", "is_anomaly"]
 
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-MODEL_PATH = os.path.join(BASE_DIR, "cicids2017_rf_model_v1.pkl")
+MODEL_PATH = os.path.join(BASE_DIR, "cicids2017_rf_model_v2.pkl")
 
 def load_model(model_path):
     return joblib.load(model_path)
@@ -33,6 +33,11 @@ def add_pred_column(input_csv_path, output_csv_path, pred_col="attack_type"):
     print(f"{len(df)}개의 행을 예측 중입니다.")
     X = prepare_X(df)
     df[pred_col] = model.predict(X)
+    proba = model.predict_proba(X)
+    classes = model.classes_
+
+    for i, cls in enumerate(classes):
+        df[f"prob_{cls}"] = (proba[:, i] * 100).round(1)
 
     df.to_csv(output_csv_path, index=False)
     print("파일 저장 중:", output_csv_path)
