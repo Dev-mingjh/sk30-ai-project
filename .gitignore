@@ -2,3 +2,4 @@ venv
 .env
 ui_test.py
 __pycache__/
+user_log_with_pred.csv

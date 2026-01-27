@@ -1,24 +1,23 @@
-import streamlit as st
-import pandas as pd
-import numpy as np
 import os
+import pandas as pd
+import streamlit as st
+import streamlit.components.v1 as components
+import time
+import base64
+import matplotlib.pyplot as plt
 from dotenv import load_dotenv
+from io import BytesIO
 from openai import OpenAI
+
+from analyze import *
 from guide import *
 from model import infer
-import matplotlib.pyplot as plt
-import seaborn as sns
-import streamlit.components.v1 as components
-from analyze import *
 
+client = None
 
-# ============================================================
-# 1. 초기 설정 및 환경 변수
-# ============================================================
-# load_dotenv()
-# OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
-# client = OpenAI(api_key=OPENAI_API_KEY)
-
+@st.cache_data
+def convert_df_to_csv(df):
+    return df.to_csv(index=False).encode('utf-8-sig')
 
 def init_settings():
     """페이지 설정 및 세션 상태 초기화"""
@@ -43,17 +42,13 @@ def init_settings():
     if "last_processed_file" not in st.session_state:
         st.session_state.last_processed_file = None
     infer._load_model()
+    load_dotenv()
+    OPENAI_API_KEY = os.getenv('OPENAI_API_KEY')
+    global client
+    client = OpenAI(api_key=OPENAI_API_KEY)
 
-def push_msg(role, content, visualize=False):
-    """메시지를 세션 상태에 추가"""
-    st.session_state.messages.append({
-        "role": role, 
-        "content": content, 
-        "visualize": visualize
-    })
-# ============================================================
-# 2. UI 및 CSS 함수
-# ============================================================
+
+
 def apply_custom_css():
     """기존 CSS 스타일 그대로 적용"""
     st.markdown("""
@@ -96,14 +91,80 @@ def apply_custom_css():
         </style>
         """, unsafe_allow_html=True)
 
+def typewriter_markdown(text: str, chunk_size: int = 6, delay: float = 0.01):
+    placeholder = st.empty()
+    acc = ""
 
-@st.cache_data
-def convert_df_to_csv(df):
-    # 중요: 대용량 파일일 경우 encoding='utf-8-sig'를 사용해야 한글 깨짐이 없습니다.
-    return df.to_csv(index=False).encode('utf-8-sig')
+    for i in range(0, len(text), chunk_size):
+        acc += text[i:i + chunk_size]
+        placeholder.markdown(acc)
+
+        ensure_chat_bottom_anchor()
+        scroll_to_bottom_smooth()
+
+        time.sleep(delay)
+
+    return acc
+
+
+
+def ensure_chat_bottom_anchor():
+    st.markdown('<div id="chat-bottom"></div>', unsafe_allow_html=True)
+
+def scroll_to_bottom_smooth():
+    components.html(
+        """
+        <script>
+        const el = window.parent.document.getElementById("chat-bottom");
+        if (el) { el.scrollIntoView({ behavior: "smooth", block: "end" }); }
+        </script>
+        """,
+        height=0,
+    )
+
+def push_msg(role, content, visualize=False):
+    """메시지를 세션 상태에 추가"""
+    st.session_state.messages.append({
+        "role": role, 
+        "content": content, 
+        "visualize": visualize
+    })
+
+def visualize_attack_counts(_df, exclude_benign: bool = True, use_log_scale: bool = False):
+    df = _df
+    target_col = "attack_type"
+    counts = df[target_col].value_counts()
+
+    if exclude_benign:
+        counts = counts.drop(labels=["Benign"], errors="ignore")
+
+    fig, ax = plt.subplots(figsize=(10, 5))
+    ax.bar(counts.index.astype(str), counts.values)
+    ax.set_title(f'Detected Threats Distribution (Excluding Benign)', fontsize=14, fontweight='bold')
+    ax.set_xlabel('Attack Type', fontsize=12)
+    ax.set_ylabel('Count', fontsize=12)
+    ax.tick_params(axis="x", rotation=45)
+
+    if use_log_scale:
+        ax.set_yscale("log")
+
+    for i, v in enumerate(counts.values):
+        ax.text(i, v, f"{int(v)}", ha="center", va="bottom", fontsize=9)
+
+    fig.tight_layout()
+
+    buf = BytesIO()
+    fig.savefig(buf, format="png", dpi=150)
+    plt.close(fig)
+    buf.seek(0)
+
+    return {
+        "target_col": target_col,
+        "counts": counts.to_dict(),
+        "image_base64": base64.b64encode(buf.getvalue()).decode("utf-8"),
+    }
 
 def display_chat_messages():
-
     if not st.session_state.messages:
         typewriter_markdown("안녕하세요.   분석할 로그 파일을 업로드 해주세요")
 
@@ -116,9 +177,8 @@ def display_chat_messages():
                     data=csv_data,
                     file_name=f"analysis_result_{st.session_state.last_processed_file}",
                     mime="text/csv",
-                    key=f"download_btn_{st.session_state.last_processed_file}" # 키 중복 방지
+                    key=f"download_btn_{st.session_state.last_processed_file}" 
                 )
-            # ✅ plot 메시지 처리
             if msg.get("type") == "plot" and msg.get("plot_base64"):
                 if msg.get("content"):
                     st.markdown(msg["content"])
@@ -172,7 +232,6 @@ def set_sidebar():
 
         
 def set_header():
-    # 헤더 영역
     st.markdown('<div class="main-header">🛡️ 네트워크 로그 이상 징후 탐지 시스템</div>', unsafe_allow_html=True)
     st.markdown('<div class="sub-header">※ PCAP/패킷 로그를 CICFlowMeter로 변환한 flow-level feature CSV 파일만 지원합니다 ※</div>', unsafe_allow_html=True)
 
@@ -185,13 +244,13 @@ def set_putter():
         </div>
         """, unsafe_allow_html=True)
 
+
+
 def set_chat_upload():
-     # 1. 메인 채팅 영역
     chat_container = st.container()
     with chat_container:
         display_chat_messages()
 
-    # 2. 하단 입력 및 파일 업로드 영역
     input_area = st.container()
     with input_area:
         col_input, col_upload = st.columns([9.5, 0.5])
@@ -199,7 +258,6 @@ def set_chat_upload():
         with col_input:
             if prompt := st.chat_input("메시지를 입력하세요..."):
                 handle_input(prompt)
-                #handle_ai_chat(prompt, chat_container)
                 st.rerun()
 
         with col_upload:
@@ -208,13 +266,10 @@ def set_chat_upload():
                 if "last_processed_file" not in st.session_state:
                     st.session_state.last_processed_file = None
 
-                # 현재 업로드된 파일이 이전에 처리한 파일과 다를 때만 실행
                 if st.session_state.last_processed_file != uploaded_file.name:
                     st.session_state.df = pd.read_csv(uploaded_file)
                     st.toast(f"✅ {uploaded_file.name} 로드 완료!", icon="📄")
                     
-                    # 모델 예측 실행
-                    #df = infer.predict_attack_type(st.session_state.df)
                     predicted_df = infer.add_pred_column(st.session_state.df)
                     st.session_state.df = predicted_df 
                     st.session_state.csv_path = 'user_log_with_pred.csv'
@@ -231,7 +286,6 @@ def set_chat_upload():
                             if atk != 'Benign':
                                 count = len(predicted_df[predicted_df['attack_type'] == atk])
                                 content += f'- {atk} ({count}건)\n'
-                        #content += "\n상세 설명이 필요한 공격명을 입력하시거나, 다운로드 버튼을 눌러 전체 결과(CSV)를 다운로드하세요."
 
                     st.session_state.messages.append({
                         "role": "assistant",
@@ -250,73 +304,15 @@ def set_chat_upload():
                         "content": "\n상세 설명이 필요한 공격명을 입력하시거나, 다운로드 버튼을 눌러 전체 결과(CSV)를 다운로드하세요.",
                         "is_report": True
                     })
-                    # visualize(df)
-                    # 현재 파일 이름을 기록하여 다음 리런 때 중복 실행 방지
                     st.session_state.last_processed_file = uploaded_file.name
                     
-                    # 상태 업데이트 후 화면 갱신
                     st.rerun()
-
-def visualize(df):
-    # 컬럼명 자동 지정 (마지막 컬럼이 attack_type인 경우)
-    target_col = df.columns[-1]
-    counts = df[target_col].value_counts()
-
-    # 2. 시각화 설정 (Figure 객체 생성)
-    fig, ax = plt.subplots(figsize=(10, 6))
-
-    # 3. Seaborn 막대 그래프 그리기
-    sns.barplot(
-        x=counts.index, 
-        y=counts.values, 
-        ax=ax, 
-        hue=counts.index,     # x축 변수를 hue에도 똑같이 지정
-        palette='viridis',    # 사용할 색상 팔레트
-        legend=False          # hue를 쓰면 자동으로 생기는 범례를 숨김
-    )   
-
-    # 4. Y축을 로그 스케일로 설정 (가장 중요한 부분)
-    ax.set_yscale("log")
-
-    # 5. 그래프 디테일 추가
-    ax.set_title(f'Log-Scaled Distribution of {target_col}', fontsize=14)
-    ax.set_xlabel('Attack Type', fontsize=12)
-    ax.set_ylabel('Count (Log Scale)', fontsize=12)
-    plt.xticks(rotation=45) # 라벨이 겹치지 않게 회전
-
-    # 그래프 상단에 실제 수치 표시 (선택 사항)
-    for i, v in enumerate(counts.values):
-        ax.text(i, v, f'{v:,}', ha='center', va='bottom', fontsize=10)
-
-    # 6. Streamlit 출력
-    st.pyplot(fig)
-
-def ensure_chat_bottom_anchor():
-    # 채팅 맨 아래에 앵커를 항상 찍어둠
-    st.markdown('<div id="chat-bottom"></div>', unsafe_allow_html=True)
-
-def scroll_to_bottom_smooth():
-    # key를 매번 바꿔서 컴포넌트가 "실제로" 다시 실행되게 함
-    components.html(
-        """
-        <script>
-        const el = window.parent.document.getElementById("chat-bottom");
-        if (el) { el.scrollIntoView({ behavior: "smooth", block: "end" }); }
-        </script>
-        """,
-        height=0,
-        key=f"scroll_{time.time_ns()}",
-    )
-
 
 def handle_input(user_text):
     push_msg("user", user_text)
 
-    # 모든 도구 통합
-    import guide
-    integrated_tools = guide.TOOLS + ANALYZE_TOOLS
+    integrated_tools = TOOLS + ANALYZE_TOOLS
 
-    # 1단계: 의도 파악 및 도구 호출 결정
     response = client.chat.completions.create(
         model="gpt-4o",
         messages=[
@@ -344,11 +340,8 @@ def handle_input(user_text):
 
         with st.spinner(f"분석 중: {fn_name}..."):
             if fn_name == "analyze_user_file":
-                # 1. 데이터 분석 실행
                 raw_analysis = analyze_user_file_stats(fn_args["attack_type"])
                 
-                # 2. 2단계 호출: 데이터를 AI에게 강력하게 주입
-                # AI에게 '나열하지 말고 해석해라'는 지시를 한 번 더 강조합니다.
                 second_response = client.chat.completions.create(
                     model="gpt-4o",
                     messages=[
@@ -365,8 +358,7 @@ def handle_input(user_text):
                 )
                 final_answer = second_response.choices[0].message.content
             else:
-                # 일반 가이드 (기존 로직)
-                result = guide.FUNCTION_MAP[fn_name](fn_args)
+                result = FUNCTION_MAP[fn_name](fn_args)
                 final_answer = result['answer']
         typewriter_markdown(final_answer, chunk_size=6, delay=0.01)
         st.session_state.messages.append({
