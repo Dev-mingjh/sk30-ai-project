@@ -167,8 +167,13 @@ def set_sidebar():
         st.divider()
         st.subheader("대응 가이드 DB")
         st.write("- **DB:** Vector DB")
-        st.write("- **참조:** MITRE ATT&CK")
-        st.write("- **참조:** KISA 침해사고대응 안내서")
+        st.write("- **참조:** 정보통신분야 침해사고 대응 안내서(개정본)")
+        st.write("- **참조:** 한국인터넷진흥원 훈련 분야별 대응 가이드
+
+
+
+
+")
 
         
 def set_header():
