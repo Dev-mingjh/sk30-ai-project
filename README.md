@@ -27,6 +27,9 @@ OPENAI_API_KEY=your_key_here
 - Guide: 벡터DB를 통해 공격에 대한 가이드 제공
 - UI: 챗봇 형태로 Model/Guide Agent 결과 사용자에게 제공
 
+## **프로그램 시연 영상**
+https://github.com/user-attachments/assets/47e2fb48-d5e7-4818-9346-d38bef83c59a
+
 ---
 
 # **GUIDE AGENT (공격 대응 가이드)**
