@@ -10,6 +10,25 @@ python -m pip install --upgrade pip
 pip install -r requirements.txt
 ```
 
+> 추가적인 환경 설정
+```
+## **환경 변수**
+**`.env`** 파일에 OPENAI_API_KEY 관리하세요
+OPENAI_API_KEY=your_key_here
+```
+# **프로젝트 주제**
+
+네트워크 로그 파일을 업로드하면 머신러닝 모델이 위협을 자동 분류 하고 AI 보안 에이전트가 분류된 공격에 대한 상세 설명 및 기술적 대응 가이드를 제공하는 챗봇 시스템
+
+## **프로그램 구성**
+
+- Model Agent + Guide Agent + UI Agent (3개의 에이전트로 구성)
+- Model: 네트워크 로그 공격/정상 데이터 분류
+- Guide: 벡터DB를 통해 공격에 대한 가이드 제공
+- UI: 챗봇 형태로 Model/Guide Agent 결과 사용자에게 제공
+
+---
+
 # **GUIDE AGENT (공격 대응 가이드)**
 
 MITRE ATT&CK, KISA 보고서/가이드 문서를 기반으로 공격 유형 설명, 신고 절차, 최근 사례 요약,
@@ -23,6 +42,9 @@ MITRE ATT&CK, KISA 보고서/가이드 문서를 기반으로 공격 유형 설�
 - 웹 검색 기반 최근 사례 요약
 - KISA 대응 가이드 요약
 - Streamlit 챗봇 UI 제공
+
+## 코드 분류 (UI/Infer/Guide/Analyze)
+
 
 ## **디렉터리 구조**
 
@@ -58,15 +80,6 @@ agent_guide_1/
 │  ├─ kisa_report_chunks.jsonl
 │  └─ mitre_chunks.jsonl 
 ```
-
-## **환경 변수**
-
-**`.env`** 파일을 **`agent_guide_1/`** 또는 **`agent_guide_1/rag/`** 상위에 두고 아래 값을 설정하세요.
-
-```python
-OPENAI_API_KEY=your_key_here
-```
-
 ## 코드 분류 (DB 생성 / RAG / 파이프라인)
 
 ### 1) DB 생성 관련 코드
@@ -237,6 +250,172 @@ OPENAI_API_KEY=your_key_here
 
 - 반환 dict: {"answer": str, "contexts": list, "question": str}
 - contexts는 retriever 결과 원문 및 메타 포함
+
+---
+
+# **UI AGENT 설명**
+
+사용자와 시스템 사이의 접점인 Web UI를 관리하며, 전체적인 서비스 워크플로우를 설계하고 제어한다. 단순히 인터페이스를 제공하는 것에 그치지 않고, 사용자 입력의 의도를 파악하여 적절한 내부 
+모듈(분석 모델, Guide Agent 등)로 연결하고 결과를 시각화하여 전달하는 중추적인 역할을 담당한다
+
+## **주요 기능**
+
+- 통합 인터페이스 제공: 사용자와의 대화 및 데이터 업로드를 관리하는 단일 접점(Single Point of Contact) 역할을 수행
+- 지능형 워크플로우 제어: 사용자의 의도에 따라 로그 분석 모델(Infer)과 대응 가이드 에이전트(Guide)를 유기적으로 연결
+- 분석 데이터의 직관적 시각화: 복잡한 네트워크 로그 분석 결과를 비전문가도 이해하기 쉬운 리포트와 그래프 형태로 가공하여 전달
+- 대화 맥락 유지를 통한 연속적 상담: 세션 상태 관리를 통해 파일 분석부터 상세 대응 가이드 요청까지 끊김 없는 사용자 경험을 보장
+
+## UI Agent Flow Diagram
+<img width="700" height="600" alt="Image" src="https://github.com/user-attachments/assets/a29bc5a2-6518-4f61-8cd0-c128df31e4f7" />
+
+## 코드 분류 및 UI 로직 구성
+
+###  `ui.py`  
+**메인 보안 상담 에이전트 및 화면 구성 (Streamlit UI)**
+
+보안 상담 Agent의 UI와 사용자 인터랙션 전반을 담당하는 핵심 모듈이다.  
+채팅 기반 상담, 로그 파일 업로드, 모델 예측 결과 시각화, RAG 호출까지의 전체 흐름을 관리한다.
+
+#### 주요 함수 및 역할
+
+- **`init_settings`**
+  - 웹 페이지 레이아웃을 `wide` 모드로 설정
+  - 세션 상태 초기화 (`messages`, `df`, `last_processed_file` 등)
+  - 침입 탐지 모델 로드 수행
+
+- **`apply_custom_css`**
+  - 헤더 디자인
+  - 파일 업로더 영역 압축
+  - 전체 UI 스타일 개선을 위한 CSS 적용
+
+- **`set_chat_upload`**
+  - 채팅 기반 UI의 핵심 로직
+  - 사용자 메시지 입력과 로그 파일 업로드를 동시에 처리
+  - 파일 업로드 시 다음 파이프라인 실행  
+    → 모델 예측  
+    → 결과 시각화  
+    → 요약 메시지 출력
+
+- **`display_chat_messages`**
+  - 세션에 저장된 채팅 메시지를 순차적으로 렌더링
+  - 공격 분포 그래프 및 CSV 다운로드 버튼 표시
+
+- **`handle_input`**
+  - OpenAI Function Calling을 활용하여 사용자 입력 의도 분석
+  - 입력 유형에 따라 다음 기능으로 분기 처리
+    - 로그 분석 (`analyze`)
+    - RAG 기반 설명 / 가이드 / 신고 절차 / 사례 조회
+
+- **`execute_chatbot`**
+  - UI 애플리케이션의 메인 실행 함수
+  - 실행 흐름:
+    1. 초기화
+    2. CSS 적용
+    3. 헤더 구성
+    4. 채팅/파일 업로드 UI
+    5. 사이드바
+    6. 푸터
+
+- **`load_bundle`**
+  - VectorDB 및 임베딩 모델을 포함한 RAG 번들 초기화
+  - 캐싱 처리로 반복 호출 시 성능 저하 방지
+
+- **`TOOLS / FUNCTION_MAP`**
+  - OpenAI Function Calling에 사용되는 도구 정의
+  - 실제 RAG API 함수와의 매핑 관리
+    - MITRE ATT&CK 설명
+    - KISA 대응 가이드
+    - KISA 신고 절차
+    - 최근 공격 사례
+
+- **`typewriter_markdown`**
+  - AI 응답을 일정 단위로 분할 출력
+  - 실제 사람이 타이핑하는 것처럼 보이게 하는 UX 핵심 기능
+
+- **`visualize_attack_counts`**
+  - 공격 유형 분포를 `matplotlib` 기반 그래프로 생성
+  - PNG → base64 변환 후 채팅 UI에 삽입
+
+---
+
+###  `infer.py`  
+**네트워크 로그 분석 모델 연동**
+
+CICIDS 기반 침입 탐지 모델을 로드하고, 사용자 로그 데이터를 전처리·예측하는 역할을 담당한다.
+
+#### 주요 함수 및 역할
+
+- **`_load_model`**
+  - RandomForest 기반 침입 탐지 모델  
+    (`cicids2017_rf_model_v2.pkl`) 로드
+  - 싱글톤 패턴 적용으로 UI 실행 중 중복 로딩 방지
+
+- **`get_required_columns`**
+  - Pipeline 및 `ColumnTransformer` 정보를 기반으로
+  - 모델 학습 시 사용된 입력 특징(feature) 목록 추출
+
+- **`prepare_X`**
+  - 사용자 로그 DataFrame 전처리
+  - 불필요한 컬럼 제거
+  - 모델 입력 구조에 맞게 컬럼 정렬
+  - 누락 컬럼은 0으로 채움
+  - `Protocol` 타입 변환 수행
+
+- **`add_pred_column`**
+  - 전처리된 입력 데이터를 기반으로 공격 유형 예측
+  - 각 로그 행에 다음 컬럼 추가
+    - `attack_type`
+    - 클래스별 예측 확률 (`prob_*`)
+
+---
+
+### `guide.py`  
+**RAG 기반 보안 상담 로직**
+
+VectorDB 검색과 LLM 생성을 결합하여 공격 유형별 보안 가이드를 생성한다.
+
+#### 주요 함수
+
+- **`run_explain`**
+  - MITRE ATT&CK 기반 공격 유형 설명 생성
+
+- **`run_report`**
+  - KISA 침해사고 신고 및 행정 대응 절차 생성
+
+- **`run_recent_cases`**
+  - 웹 검색 기반 최근 공격 사례 요약
+
+- **`run_guide`**
+  - KISA 대응 가이드 기반 기술·운영 대응 절차 생성
+
+---
+
+###  `analyze.py`  
+**업로드 로그 통계 분석 모듈**
+
+사용자가 업로드한 로그 데이터를 정량적으로 분석하여 공격 특성을 도출한다.
+
+#### 주요 함수 및 역할
+
+- **`analyze_user_file_stats`**
+  - 세션에 저장된 사용자 로그 데이터를 기반으로 분석 수행
+  - 특정 공격 유형과 정상 트래픽을 비교 분석
+
+#### 분석 지표
+
+- Flow Duration
+- Flow Bytes/s
+- Flow Packets/s
+- Avg Packet Size
+
+각 지표에 대해 평균값 및 최대값을 계산하여 공격 특성을 정량화한다.
+
+- **`ANALYZE_TOOLS`**
+  - OpenAI Function Calling에서  
+    “내 파일 분석” 요청을 처리하기 위한 전용 분석 도구 정의
+
+---
+
 
 
 <!--
