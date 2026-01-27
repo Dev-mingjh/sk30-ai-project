@@ -8,6 +8,9 @@ from guide import *
 from model import infer
 import matplotlib.pyplot as plt
 import seaborn as sns
+import streamlit.components.v1 as components
+from analyze import *
+
 
 # ============================================================
 # 1. 초기 설정 및 환경 변수
@@ -37,10 +40,17 @@ def init_settings():
         st.session_state.recent_done = False
     if "debug" not in st.session_state:
         st.session_state.debug = False
-
+    if "last_processed_file" not in st.session_state:
+        st.session_state.last_processed_file = None
     infer._load_model()
 
-
+def push_msg(role, content, visualize=False):
+    """메시지를 세션 상태에 추가"""
+    st.session_state.messages.append({
+        "role": role, 
+        "content": content, 
+        "visualize": visualize
+    })
 # ============================================================
 # 2. UI 및 CSS 함수
 # ============================================================
@@ -86,51 +96,36 @@ def apply_custom_css():
         </style>
         """, unsafe_allow_html=True)
 
+
+@st.cache_data
+def convert_df_to_csv(df):
+    # 중요: 대용량 파일일 경우 encoding='utf-8-sig'를 사용해야 한글 깨짐이 없습니다.
+    return df.to_csv(index=False).encode('utf-8-sig')
+
 def display_chat_messages():
-    # 초기 안내
+
     if not st.session_state.messages:
-        push_msg("assistant", "안녕하세요.   분석할 로그 파일을 업로드 해주세요")
-        st.rerun()
-    # 채팅 기록 표시
+        typewriter_markdown("안녕하세요.   분석할 로그 파일을 업로드 해주세요")
+
     for msg in st.session_state.messages:
         with st.chat_message(msg["role"]):
-            st.markdown(msg["content"])
-
-# ============================================================
-# 3. 비즈니스 로직 함수
-# ============================================================
-# def handle_ai_chat(prompt, chat_container):
-#     """OpenAI API 호출 및 스트리밍 응답 처리"""
-#     st.session_state.messages.append({"role": "user", "content": prompt})
-    
-#     with chat_container:
-#         with st.chat_message("user"):
-#             st.markdown(prompt)
-
-#         with st.chat_message("assistant"):
-#             message_placeholder = st.empty()
-#             full_response = ""
-            
-#             try:
-#                 system_msg = {"role": "system", "content": "너는 네트워크 보안 전문가야. 로그 분석 결과와 보안 위협에 대해 전문적으로 답변해줘."}
-#                 completion = client.chat.completions.create(
-#                     model="gpt-4o-mini",
-#                     messages=[system_msg] + [
-#                         {"role": m["role"], "content": m["content"]}
-#                         for m in st.session_state.messages
-#                     ],
-#                     stream=True,
-#                 )
-
-#                 for response in completion:
-#                     full_response += (response.choices[0].delta.content or "")
-#                     message_placeholder.markdown(full_response + "▌")
-                
-#                 message_placeholder.markdown(full_response)
-#                 st.session_state.messages.append({"role": "assistant", "content": full_response})
-            
-#             except Exception as e:
-#                 st.error(f"OpenAI API 오류가 발생했습니다: {e}")
+            if msg.get("is_report") and st.session_state.df is not None:
+                csv_data = convert_df_to_csv(st.session_state.df)
+                st.download_button(
+                    label="📥 분석 결과 리포트 다운로드 (CSV)",
+                    data=csv_data,
+                    file_name=f"analysis_result_{st.session_state.last_processed_file}",
+                    mime="text/csv",
+                    key=f"download_btn_{st.session_state.last_processed_file}" # 키 중복 방지
+                )
+            # ✅ plot 메시지 처리
+            if msg.get("type") == "plot" and msg.get("plot_base64"):
+                if msg.get("content"):
+                    st.markdown(msg["content"])
+                img_bytes = base64.b64decode(msg["plot_base64"])
+                st.image(BytesIO(img_bytes), width="stretch")
+            else:
+                st.markdown(msg["content"])
 
 def render_dashboard():
     with st.expander("🚨 로그 요약 및 대시보드", expanded=True):
@@ -219,26 +214,41 @@ def set_chat_upload():
                     st.toast(f"✅ {uploaded_file.name} 로드 완료!", icon="📄")
                     
                     # 모델 예측 실행
-                    df = infer.predict_attack_type(st.session_state.df)
-                    st.session_state.df = df
-                    
+                    #df = infer.predict_attack_type(st.session_state.df)
+                    predicted_df = infer.add_pred_column(st.session_state.df)
+                    st.session_state.df = predicted_df 
+                    st.session_state.csv_path = 'user_log_with_pred.csv'
                     st.toast("✅ 모델 예측 완료", icon="🤖")
-
-                    attacks = df['attack_type'].unique()
-                    content = f'`{uploaded_file.name}` 분석 완료\n\n 로그 분석 결과 입니다'
+                    result = visualize_attack_counts(st.session_state.df)
+                    attacks = predicted_df['attack_type'].unique()
+                    content = f'{uploaded_file.name}` 분석 완료\n\n'
                     
-                    if len(attacks) == 1:
-                        cotent += "악성 로그가 탐지 되지 않았습니다."
+                    if len(attacks) <= 1 and attacks[0] == 'Benign':
+                        content += "✅ 악성 로그가 탐지되지 않았습니다."
                     else: 
-                        content += '탐지된 악성 공격 리스트 입니다\n\n'
-                        for num in range(len(attacks)):
-                            if attacks[num] != 'Benign':
-                                content += f'{num}. {attacks[num]}\n\n'
-                        content += "상세 설명 원하시는 공격이 있을 경우 입력해주세요"
-                        # 메시지 추가
+                        content += '🧨 **탐지된 악성 공격 리스트:**\n\n'
+                        for atk in attacks:
+                            if atk != 'Benign':
+                                count = len(predicted_df[predicted_df['attack_type'] == atk])
+                                content += f'- {atk} ({count}건)\n'
+                        #content += "\n상세 설명이 필요한 공격명을 입력하시거나, 다운로드 버튼을 눌러 전체 결과(CSV)를 다운로드하세요."
+
                     st.session_state.messages.append({
                         "role": "assistant",
                         "content": content,
+                    })
+
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "type": "plot",
+                        "content": "공격 유형별 탐지 건수 그래프",
+                        "plot_base64": result["image_base64"],
+                    })
+
+                    st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": "\n상세 설명이 필요한 공격명을 입력하시거나, 다운로드 버튼을 눌러 전체 결과(CSV)를 다운로드하세요.",
+                        "is_report": True
                     })
                     # visualize(df)
                     # 현재 파일 이름을 기록하여 다음 리런 때 중복 실행 방지
@@ -280,6 +290,97 @@ def visualize(df):
 
     # 6. Streamlit 출력
     st.pyplot(fig)
+
+def ensure_chat_bottom_anchor():
+    # 채팅 맨 아래에 앵커를 항상 찍어둠
+    st.markdown('<div id="chat-bottom"></div>', unsafe_allow_html=True)
+
+def scroll_to_bottom_smooth():
+    # key를 매번 바꿔서 컴포넌트가 "실제로" 다시 실행되게 함
+    components.html(
+        """
+        <script>
+        const el = window.parent.document.getElementById("chat-bottom");
+        if (el) { el.scrollIntoView({ behavior: "smooth", block: "end" }); }
+        </script>
+        """,
+        height=0,
+        key=f"scroll_{time.time_ns()}",
+    )
+
+
+def handle_input(user_text):
+    push_msg("user", user_text)
+
+    # 모든 도구 통합
+    import guide
+    integrated_tools = guide.TOOLS + ANALYZE_TOOLS
+
+    # 1단계: 의도 파악 및 도구 호출 결정
+    response = client.chat.completions.create(
+        model="gpt-4o",
+        messages=[
+            {
+                "role": "system", 
+                "content": (
+                    "당신은 네트워크 보안 전문가입니다. "
+                    "1. '내 파일', '내 로그', '이 데이터' 등 업로드된 파일 내용을 묻는 경우 'analyze_user_file'을 호출하세요. "
+                    "2. 그런 언급 없이 일반적인 정의나 대응 방법을 물으면 가이드(guide) 관련 함수를 호출하세요. "
+                    "3. analyze_user_file의 결과(JSON)를 받으면, 수치를 나열하지 말고 'Flow Packets/s가 매우 높아 플러딩 공격으로 의심된다'는 식으로 전문가답게 해석해 답변하세요."
+                )
+            },
+            *st.session_state.messages
+        ],
+        tools=integrated_tools,
+        tool_choice="auto",
+    )
+
+    msg = response.choices[0].message
+
+    if msg.tool_calls:
+        tool_call = msg.tool_calls[0]
+        fn_name = tool_call.function.name
+        fn_args = json.loads(tool_call.function.arguments)
+
+        with st.spinner(f"분석 중: {fn_name}..."):
+            if fn_name == "analyze_user_file":
+                # 1. 데이터 분석 실행
+                raw_analysis = analyze_user_file_stats(fn_args["attack_type"])
+                
+                # 2. 2단계 호출: 데이터를 AI에게 강력하게 주입
+                # AI에게 '나열하지 말고 해석해라'는 지시를 한 번 더 강조합니다.
+                second_response = client.chat.completions.create(
+                    model="gpt-4o",
+                    messages=[
+                        {"role": "system", "content": "당신은 제공된 통계 데이터를 기반으로 근거를 제시하는 보안 분석가입니다. '현상 나열'이 아니라 '데이터 기반 해석'을 하세요."},
+                        *st.session_state.messages,
+                        msg,
+                        {
+                            "role": "tool", 
+                            "tool_call_id": tool_call.id, 
+                            "name": fn_name, 
+                            "content": f"이것은 실제 파일에서 추출한 데이터입니다. 수치(평균, 최대값)를 언급하며 DDoS/DoS 등의 근거를 설명하세요: {raw_analysis['answer']}"
+                        }
+                    ]
+                )
+                final_answer = second_response.choices[0].message.content
+            else:
+                # 일반 가이드 (기존 로직)
+                result = guide.FUNCTION_MAP[fn_name](fn_args)
+                final_answer = result['answer']
+        typewriter_markdown(final_answer, chunk_size=6, delay=0.01)
+        st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": final_answer,
+                    })
+    else:
+        typewriter_markdown(msg.content, chunk_size=6, delay=0.01)
+        st.session_state.messages.append({
+                        "role": "assistant",
+                        "content": msg.content,
+                    })
+    
+    st.rerun()
 
 def execute_chatbot():
     init_settings()

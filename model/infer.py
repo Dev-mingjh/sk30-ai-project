@@ -67,21 +67,21 @@ def prepare_X(df, required_cols):
     return X
 
 
-def add_pred_column(input_csv_path, output_csv_path, pred_col="attack_type"):
-    print("모델 로딩 중입니다.")
-    model = load_model(MODEL_PATH)
+def add_pred_column(_df, pred_col="attack_type"):
+    #print("모델 로딩 중입니다.")
+    model = _load_model()
 
-    print("모델이 요구하는 컬럼 추출 중...")
+    #print("모델이 요구하는 컬럼 추출 중...")
     required_cols = get_required_columns(model)
-    print(f"필요 컬럼 수: {len(required_cols)}")
+    #print(f"필요 컬럼 수: {len(required_cols)}")
 
-    print("CSV 읽는 중:", input_csv_path)
-    df = pd.read_csv(input_csv_path)
+    #print("CSV 읽는 중:", input_csv_path)
+    df = _df
 
     if df.empty:
         raise ValueError("입력 CSV가 비어 있습니다.")
 
-    print(f"{len(df)}개의 행을 예측 중입니다.")
+    #print(f"{len(df)}개의 행을 예측 중입니다.")
 
     X = prepare_X(df, required_cols)
 
@@ -95,10 +95,10 @@ def add_pred_column(input_csv_path, output_csv_path, pred_col="attack_type"):
         for i, cls in enumerate(classes):
             df[f"prob_{cls}"] = (proba[:, i] * 100).round(1)
 
-    df.to_csv(output_csv_path, index=False)
-    print("파일 저장 완료:", output_csv_path)
+    df.to_csv('user_log_with_pred.csv', index=False)
+    #print("파일 저장 완료:", output_csv_path)
 
-    return output_csv_path
+    return df
 
 
 if __name__ == "__main__":
