@@ -33,7 +33,8 @@ from .configs.constants import (
     ATTACK_FAMILY_MAP,
 )
 
-
+# 여러 컬렉션(MITRE/KISA Report/KISA Guide)용 RAGEngine과
+# 공통 모델/경로 정보를 한 번에 들고 다니기 위한 묶음 객체
 @dataclass
 class RagBundle:
     rag_mitre: RAGEngine
@@ -47,6 +48,10 @@ class RagBundle:
     collection_kisa_guide: str
 
 
+# env 로드 -> 컬렉션/모델 결정 -> Retriever/Generator/RAGEngine 생성
+# - 컬렉션 이름/모델은 환경변수 우선, 없으면 constants 기본값 사용
+# - chroma_dir 기본값: DEFAULT_OUT_DIR/DEFAULT_CHROMA_SUBDIR
+# 반환: RagBundle (3개 RAGEngine + 모델/경로 메타 포함)
 def create_rag_bundle(
     chroma_dir: Optional[str] = None,
     embed_model: Optional[str] = None,
@@ -106,7 +111,8 @@ def create_rag_bundle(
         collection_kisa_guide=collection_kisa_guide,
     )
 
-
+# 입력 문장에서 ATTACK_LABELS 중 첫 매칭 라벨을 반환
+# 단순 포함 검사(정규식/우선순위 없음)라 오탐 가능
 def extract_attack_type(text: str) -> Optional[str]:
     t = (text or "").lower()
     for attack in ATTACK_LABELS:
@@ -114,11 +120,16 @@ def extract_attack_type(text: str) -> Optional[str]:
             return attack
     return None
 
-
+# 라벨을 가이드 문서에 작성된 3가지 공격 유형으로으로 매핑 (디도스, 웹 침해, 서버 취학점 침해)
+# 매핑이 없으면 원본 라벨 그대로 반환
 def map_attack_family(label: str) -> str:
     return ATTACK_FAMILY_MAP.get(label, label)
 
-
+# MITRE 기반 설명 생성
+# 1) LABEL_TO_ATTACK의 anchor_techniques 우선 검색(섹션 필터 적용)
+# 2) 결과가 비면 일반 질의로 fallback 검색
+# 3) 증거(format_evidence)로 시스템 프롬프트 구성 후 생성
+# 반환: {"answer", "contexts", "question"}
 def answer_mitre_explain(
     bundle: RagBundle,
     attack_label: str,
@@ -175,6 +186,10 @@ def answer_mitre_explain(
 
 from typing import Optional
 
+# KISA 신고 절차 요약
+# - DDoS일 때: label 필터(특정 라벨 문단)
+# - 그 외: section="incident_response_guide" (일반 신고 절차)
+# 증거 기반 시스템 프롬프트(build_kisa_report_system)로 답변 생성
 def answer_kisa_report(
     bundle: RagBundle,
     attack_label: str,
@@ -203,7 +218,10 @@ def answer_kisa_report(
     answer = bundle.rag_kisa_report.generate(q, contexts, system=system) if contexts else "No evidence found."
     return {"answer": answer, "contexts": contexts, "question": q}
 
-
+# KISA 가이드 대응 요약
+# - 가이드에 작성된 3가지 공격 유형(디도스, 웹 침해, 서버 취약점 침해) 라벨로 질문 구성
+# - section="kisa_guide_response" 필터만 사용
+# 반환: {"answer", "contexts", "question"}
 def answer_kisa_guide(
     bundle: RagBundle,
     attack_label: str,
@@ -225,6 +243,9 @@ def answer_kisa_guide(
     return {"answer": answer, "contexts": contexts, "question": q}
 
 
+# 최신 사례 요약(웹 서칭)
+# - collect_web_evidence로 웹 증거 수집
+# - Chroma 검색 없이 시스템 프롬프트만으로 생성
 def answer_recent_cases(
     bundle: RagBundle,
     attack_label: str,

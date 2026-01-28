@@ -90,6 +90,13 @@ def save_jsonl(items: list[dict], path: str) -> None:
             f.write(json.dumps(it, ensure_ascii=False) + "\n")
 
 # KISA 가이드 PDF에서 '대응 방안/초동 대응' 구간만 추출하여 청크 JSONL 항목 생성
+# KISA Guide 청크 규칙:
+# - PDF 텍스트 정제(clean_text) 후 문단 분리
+# - START/END 패턴으로 가이드 구간만 추출
+# - 번호/불릿 기준으로 action 블록 추가 분할
+# - chunk_text(CHUNK_SIZE, CHUNK_OVERLAP)로 오버랩 분할
+# - section은 "kisa_guide_response" (또는 전달된 section) 사용
+
 def build_kisa_guide_chunks(
     pdf_path: str,
     label: str,
@@ -103,16 +110,21 @@ def build_kisa_guide_chunks(
     idx = 0
     in_guide_block = False
 
+    # END_RE.search(para)를 페이지 순회하며 검사
+    # END_RE.search(para): PART+숫자, 제 N 참고사항, 침해사고 신고, 신고방법
     for p in pages:
         page_no = int(p.get("page_no", -1))
         paras = split_paragraphs(p.get("text", ""))
 
         for para in paras:
-            # 종료 조건이 먼저 나오면 블록 종료
+            
+            # 종료 조건에 맞춰 가이드 구간이 끝나는 문단 찾기
+            # 종료 조건: PART+숫자, 제 N 참고사항, 침해사고 신고, 신고방법, 피해지원 문의처
             if END_RE.search(para):
-                in_guide_block = False
+                in_guide_block = False 
 
-            # 시작 조건이 나오면 블록 시작
+            # 시작 조건에 맞춰 추출을 시작
+            # 시작 조건: 대응 방안, 대응 방법, 대응 체계, 초기 대응, 초동 대응 
             if START_RE.search(para):
                 in_guide_block = True
 

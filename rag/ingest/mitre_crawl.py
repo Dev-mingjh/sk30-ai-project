@@ -52,6 +52,12 @@ def fetch_technique_text(technique_id: str, base_url: str = BASE_MITRE_URL,) -> 
 
 
 # label_map(anchor_techniques) 기준으로 MITRE 청크 JSONL 항목 생성
+# MITRE 청크 규칙:
+# - label_map의 anchor_techniques를 순회
+# - Technique 페이지의 h2 섹션별 본문(p/li) 수집
+# - 섹션 텍스트를 chunk_text로 고정 길이 분할(오버랩 없음)
+# - 메타: label/technique_id/title/section/url 포함
+
 def build_mitre_chunks(label_map: dict[str, object], base_url: str = BASE_MITRE_URL,) -> list[dict[str, object]]:
     mitre_chunks: list[dict[str, object]] = []
     retrieved_at = datetime.now(timezone.utc).isoformat()

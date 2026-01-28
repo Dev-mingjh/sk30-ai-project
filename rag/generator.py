@@ -19,7 +19,7 @@ def format_context(contexts: list[dict[str, object]], max_chars: int = 12000) ->
         section = m.get("section", m.get("label", ""))
         attack = m.get("attack_type", "")
 
-        # 추가: MITRE 매칭에 필요한 핵심 필드
+        # MITRE 매칭에 필요한 핵심 필드
         tid = m.get("technique_id", "")
         ttitle = m.get("technique_title", "")
         url = m.get("source_url", "")

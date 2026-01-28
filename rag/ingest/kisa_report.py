@@ -43,11 +43,17 @@ def classify_paragraph(para: str) -> str | None:
     return best_label if best_score >= 1 else None
 
 # KISA PDF 파일에서 라벨별 청크(JSONL) 생성
+# KISA Report 청크 규칙:
+# - PDF 텍스트를 문단 단위로 분리(빈/짧은 문단 제외)
+# - LABEL_KEYWORDS 키워드 매칭으로 문단 라벨 결정
+# - 문단을 chunk_text(max_len=1200)로 분할
+# - section은 "incident_response_guide"로 고정
+
 def build_kisa_chunks(pdf_path: str) -> list[dict[str, object]]:
-    # 1. 페이지별 텍스트 추출
+    # 페이지별 텍스트 추출
     pages = extract_pdf_text_by_page(pdf_path)
 
-    # 2. 페이지 → 문단 단위로 변환
+    # 페이지 -> 문단 단위로 변환
     paras: list[dict[str, object]] = []
     for p in pages:
         for para in split_paragraphs(str(p["text"])):
@@ -58,7 +64,7 @@ def build_kisa_chunks(pdf_path: str) -> list[dict[str, object]]:
                 }
             )
 
-    # 3. 문단 라벨 분류
+    # 문단 라벨 분류
     classified_paragraphs: list[dict[str, object]] = []
     for x in paras:
         lbl = classify_paragraph(str(x["text"]))
@@ -71,7 +77,7 @@ def build_kisa_chunks(pdf_path: str) -> list[dict[str, object]]:
                 }
             )
 
-    # 4. 청킹 및 JSONL 구성
+    # 청킹 및 JSONL 구성
     kisa_chunks: list[dict[str, object]] = []
     retrieved_at = datetime.now(timezone.utc).isoformat()
 
