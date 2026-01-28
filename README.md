@@ -349,6 +349,7 @@ agent_guide_1/
 - **`TOOLS / FUNCTION_MAP`**
   - OpenAI Function Calling에 사용되는 도구 정의
   - 실제 RAG API 함수와의 매핑 관리
+    - 로그 분석
     - MITRE ATT&CK 설명
     - KISA 대응 가이드
     - KISA 신고 절차
@@ -413,35 +414,10 @@ VectorDB 검색과 LLM 생성을 결합하여 공격 유형별 보안 가이드�
 
 - **`run_guide`**
   - KISA 대응 가이드 기반 기술·운영 대응 절차 생성
-
----
-
-###  `analyze.py`  
-**업로드 로그 통계 분석 모듈**
-
-사용자가 업로드한 로그 데이터를 정량적으로 분석하여 공격 특성을 도출한다.
-
-#### 주요 함수 및 역할
-
-- **`analyze_user_file_stats`**
+ 
+  - **`analyze_user_file_stats`**
   - 세션에 저장된 사용자 로그 데이터를 기반으로 분석 수행
   - 특정 공격 유형과 정상 트래픽을 비교 분석
-
-#### 분석 지표
-
-- Flow Duration
-- Flow Bytes/s
-- Flow Packets/s
-- Avg Packet Size
-
-각 지표에 대해 평균값 및 최대값을 계산하여 공격 특성을 정량화한다.
-
-- **`ANALYZE_TOOLS`**
-  - OpenAI Function Calling에서  
-    “내 파일 분석” 요청을 처리하기 위한 전용 분석 도구 정의
-
----
-
 
 
 <!--
