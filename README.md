@@ -32,6 +32,23 @@ https://github.com/user-attachments/assets/47e2fb48-d5e7-4818-9346-d38bef83c59a
 
 ---
 
+# **Model Agent**
+
+## **모델 학습 설명**
+
+- 학습 데이터셋 : CICIDS2017 , CICIDS-Collection-data
+- 데이터 형식 : Parquet, CSV
+- 학습 모델 알고리즘 : RandomForest
+
+
+## **모델 실행 절차**
+
+- Model은 네트워크 플로우(Flow) 통계 기반 CSV/Parquet 데이터를 입력으로 받는다
+- 8개 공격 대분류(Benign, DoS, DDoS, PortScan, Botnet, WebAttack, BruteForce, Infiltration) 를 예측
+- 각 클래스 확률을 포함한 결과 CSV를 생성
+
+---
+
 # **GUIDE AGENT (공격 대응 가이드)**
 
 MITRE ATT&CK, KISA 보고서/가이드 문서를 기반으로 공격 유형 설명, 신고 절차, 최근 사례 요약,
