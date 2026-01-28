@@ -9,7 +9,6 @@ from dotenv import load_dotenv
 from io import BytesIO
 from openai import OpenAI
 
-from analyze import *
 from guide import *
 from model import infer
 
@@ -67,7 +66,7 @@ def init_settings():
         st.session_state.last_processed_file = None
 
     # ML 모델 로드(추론용)
-    infer._load_model()
+    infer.load_model('./model/cicids2017_rf_model_v2.pkl')
 
     # 환경변수 로드 후 OpenAI 클라이언트 초기화
     load_dotenv()
@@ -391,8 +390,6 @@ def handle_input(user_text):
     """
     push_msg("user", user_text)
 
-    # 도구 목록 통합 (가이드 TOOLS + 파일분석 ANALYZE_TOOLS)
-    integrated_tools = TOOLS + ANALYZE_TOOLS
 
     # 1차 호출: tool 선택(자동)
     response = client.chat.completions.create(
@@ -409,7 +406,7 @@ def handle_input(user_text):
             },
             *st.session_state.messages
         ],
-        tools=integrated_tools,
+        tools=TOOLS,
         tool_choice="auto",
     )
 

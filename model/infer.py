@@ -76,7 +76,7 @@ def prepare_X(df, required_cols):
 # 5. 예측 결과 및 확률 컬럼 추가
 # -----------------------------------
 
-def add_pred_column(input_csv_path, output_csv_path, pred_col="attack_type"):
+def add_pred_column(df, pred_col="attack_type"):
     """
     입력 CSV에 대해 공격 유형 예측 수행 후
     예측 결과 및 클래스별 확률 컬럼을 추가하여 저장
@@ -85,9 +85,6 @@ def add_pred_column(input_csv_path, output_csv_path, pred_col="attack_type"):
     model = load_model(MODEL_PATH)
 
     required_cols = get_required_columns(model)
-
-    # CSV 읽기
-    df = pd.read_csv(input_csv_path)
 
     # 빈 파일 방어 코드
     if df.empty:
@@ -107,10 +104,6 @@ def add_pred_column(input_csv_path, output_csv_path, pred_col="attack_type"):
         for i, cls in enumerate(classes):
             # 확률을 % 단위로 변환 후 소수점 1자리까지 표현
             df[f"prob_{cls}"] = (proba[:, i] * 100).round(1)
-
-    # 결과 CSV 저장
-    df.to_csv(output_csv_path, index=False)
-    print("파일 저장 완료:", output_csv_path)
 
     return df
 

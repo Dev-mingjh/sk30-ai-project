@@ -1,7 +1,8 @@
 from rag import rag_api
-from guide import *
 import streamlit as st
 import time
+import json
+
 
 
 # [RAG] 벡터DB + 임베딩 + 검색 파이프라인 로드
@@ -31,12 +32,27 @@ bundle = load_bundle()
 
 # [LLM Function Calling] 사용 가능한 도구 정의
 '''
-1. explain_attack 
-2. get_kisa_report
-3. get_recent_cases
-4. get_kisa_guide
+1. analyze_usesr_file
+2. explain_attack 
+3. get_kisa_report
+4. get_recent_cases
+5. get_kisa_guide
 '''
 TOOLS = [
+    {
+        "type": "function",
+        "function": {
+            "name": "analyze_user_file",
+            "description": "사용자가 업로드한 파일/로그/데이터에 대한 구체적인 분석이나 통계를 원할 때 사용",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "attack_type": {"type": "string", "description": "분석할 공격 유형"}
+                },
+                "required": ["attack_type"]
+            }
+        }
+    },
     {
         "type": "function",
         "function": {
@@ -100,6 +116,9 @@ TOOLS = [
 
 # [Function Map] LLM 함수 호출 → 실제 Python 함수 매핑
 FUNCTION_MAP = {
+    "analyze_user_file": lambda args: analyze_user_file_stats(
+            args["attack_type"]
+    ),
     "explain_attack": lambda args: rag_api.answer_mitre_explain(
         bundle, args["attack_type"]
     ),
@@ -115,7 +134,7 @@ FUNCTION_MAP = {
 }
 
 # [Chat State] 메시지 헬퍼
-def push(role: str, content: str):
+def push(role, content):
     """
     Streamlit 세션 상태에 채팅 메시지를 추가한다.
     """
@@ -123,16 +142,6 @@ def push(role: str, content: str):
         "role": role,
         "content": content
     })
-
-# [UI] 채팅 메시지 렌더링
-def render_messages():
-    """
-    session_state.messages에 저장된 모든 채팅 메시지를
-    Streamlit chat UI로 출력한다.
-    """
-    for m in st.session_state.messages:
-        with st.chat_message(m["role"]):
-            st.markdown(m["content"])
 
 # [RAG Flow] 공격 유형 설명(MITRE ATT&CK)
 def run_explain():
@@ -243,3 +252,40 @@ def run_guide():
 
     st.session_state.guide_done = True
     st.session_state.pending_choice = False
+
+
+# [LLM] 로그 분석을 위해 유저 파일에서 데이터 추출
+def analyze_user_file_stats(attack_type):
+    df = st.session_state.get("df")
+    if df is None:
+        return {"answer": "파일 로드 실패"}
+
+    # 공격 데이터와 정상 데이터 분리
+    target_df = df[df['attack_type'].str.lower() == attack_type.lower()]
+    benign_df = df[df['attack_type'].str.lower() == 'benign']
+    
+    if target_df.empty:
+        return {"answer": "해당 공격 데이터 없음"}
+
+    # 주요 특징 추출
+    cols = ['Flow Duration', 'Total Fwd Packets', 'Flow Bytes/s', 'Flow Packets/s', 'Avg Packet Size']
+    
+    stats = {}
+    for col in cols:
+        if col in df.columns:
+            stats[col] = {
+                "attack_mean": float(round(target_df[col].mean(), 2)),
+                "benign_mean": float(round(benign_df[col].mean(), 2)) if not benign_df.empty else "N/A",
+                "attack_max": float(round(target_df[col].max(), 2))
+            }
+
+    analysis_context = {
+        "target_attack": attack_type,
+        "found_count": int(len(target_df)),
+        "row_locations": [int(x) for x in target_df.index[:10]],
+        "metrics_comparison": stats
+    }
+
+    return {"answer": json.dumps(analysis_context, ensure_ascii=False)}
+
+
