@@ -16,6 +16,12 @@ pip install -r requirements.txt
 **`.env`** 파일에 OPENAI_API_KEY 관리하세요
 OPENAI_API_KEY=your_key_here
 ```
+
+> 실행 방법
+```
+streamlit run main.py
+```
+
 # **프로젝트 주제**
 
 네트워크 로그 파일을 업로드하면 머신러닝 모델이 위협을 자동 분류 하고 AI 보안 에이전트가 분류된 공격에 대한 상세 설명 및 기술적 대응 가이드를 제공하는 챗봇 시스템
