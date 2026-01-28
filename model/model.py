@@ -12,9 +12,12 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from sklearn.impute import SimpleImputer
 from sklearn.ensemble import RandomForestClassifier
 
-#DATA_DIR = os.path.dirname(os.path.abspath(__file__))
-#OUT_DIR = os.path.dirname(os.path.abspath(__file__))
-#os.makedirs(OUT_DIR, exist_ok=True)
+#------------------------------------------------------------------------
+# 1. 데이터 로드 와 데이터 병합 및 극값 전처리
+#----------------------------------------------------------------------
+DATA_DIR = os.path.dirname(os.path.abspath(__file__))
+OUT_DIR = os.path.dirname(os.path.abspath(__file__))
+os.makedirs(OUT_DIR, exist_ok=True)
 
 train_files = [
     "DoS-Wednesday-no-metadata.parquet",
@@ -25,47 +28,51 @@ train_files = [
     "DDoS-Friday-no-metadata.parquet",
     "Infiltration-Thursday-no-metadata.parquet",
 ]
-#paths = [os.path.join(DATA_DIR, f) for f in train_files]
+paths = [os.path.join(DATA_DIR, f) for f in train_files]
 
-# 로드 + 병합
-df = pd.concat([pd.read_parquet(p) for p in train_files], ignore_index=True)
+
+df = pd.concat([pd.read_parquet(p) for p in paths], ignore_index=True)
 
 # inf/-inf -> NaN 전처리 진행
 df = df.replace([np.inf, -np.inf], np.nan)
 
+# -----------------------------------------------------------------------
+# 2. 공격 유형 8가지 대분류로 라벨 매핑
+#------------------------------------------------------------------------
 df["Label"] = (df["Label"].astype(str)
                .str.replace("�", "-", regex=False)
                .str.replace(r"\s+", " ", regex=True)
                .str.strip())
 
-# 라벨 매핑
 def map_label_big(x):
     s = str(x).strip().lower()
 
-    # 정상
+                                                                                        # 정상
     if s == "benign":
         return "Benign"
-    # ddos
+                                                                                        # ddos
     if "ddos" in s:
         return "DDoS"
-    # dos
+                                                                                        # dos
     if s.startswith("dos"):
         return "DoS"
-    # heartbleed(Dos 파일에 들어있는 분류임)
+                                                                                        # heartbleed
     if "heartbleed" in s:
         return "DoS"
-    # portscan
+                                                                                        # portscan
     if "portscan" in s or "port scan" in s:
         return "PortScan"
-    # botnet
+                                                                                        # botnet
     if "bot" in s:
         return "Botnet"
-    # web attack
+                                                                                        # web attack
     if "web attack" in s or ("web" in s and "attack" in s):
         return "WebAttack"
-    # Bruteforce
-    if "brute" in s or "patator" in s:
+    
+    if "brute" in s or "patator" in s:                                                  # Bruteforce
         return "BruteForce"
+    if "infiltration" in s:
+        return "Infiltration"
     return "OtherAttack"
 
 
@@ -74,9 +81,9 @@ df["label_big"] = df["Label"].apply(map_label_big)
 print("\n[label_big 분포(전체)]")
 print(df["label_big"].value_counts())
 
-# Infiltration 더미 데이터 증강 , 7개 → 200개로 약한 노이즈 증강, 정확한 분류가 아니라 존재 인식
-# 더 많은 더미 데이터 추가 또는 가중치, 임계값을 통한 recall 정확도 올리는 것은 오히려 왜곡이 발생함.
-# ------------------------------------------------------------------
+# -----------------------------------------------------------------------
+# 3.  Infiltration 데이터 증강, 7개 → 200개로 약한 노이즈 증강
+#------------------------------------------------------------------------
 def augment_infiltration(df, target_size=200, noise_ratio=0.01, random_state=42):
     np.random.seed(random_state)
 
@@ -99,34 +106,29 @@ def augment_infiltration(df, target_size=200, noise_ratio=0.01, random_state=42)
 
     return pd.concat([df] + augmented, ignore_index=True)
 
-# 원본 infiltration 분리
-infil_df = df[df["label_big"] == "Infiltration"].copy()
+infil_df = df[df["label_big"] == "Infiltration"].copy()                                 # 원본 infiltration 분리
 print("\n원본 Infiltration 개수:", len(infil_df))
 
-# 증강 적용
-infil_aug = augment_infiltration(infil_df, target_size=200)
+infil_aug = augment_infiltration(infil_df, target_size=200)                             # 증강 적용
 print("증강 후 Infiltration 개수:", len(infil_aug))
 
-# 기존 infiltration 제거 후 교체
-df = df[df["label_big"] != "Infiltration"]
-df = pd.concat([df, infil_aug], ignore_index=True)
+df = df[df["label_big"] != "Infiltration"]                                              # 기존 infiltration 제거 후 교체
+df = pd.concat([df, infil_aug], ignore_index=True)          
 
 print("\n[label_big 분포(증강 후)]")
 print(df["label_big"].value_counts())
 
-# ------------------------------------------------------------------------
-
-
-# 불균형 제거(1:1 비율)
+# -----------------------------------------------------------------------
+# 4.  공격/일반 데이터를 1:1 비율로 불균형제거
+#------------------------------------------------------------------------
 df["is_anomaly"] = (df["label_big"] != "Benign").astype(int)
 attack_df = df[df["is_anomaly"] == 1].copy()
 benign_df = df[df["is_anomaly"] == 0].copy()
 
-# Benign을 공격 개수만큼만 샘플링해서 1:1 맞춤
-benign_sample = benign_df.sample(n=len(attack_df), random_state=42)
+benign_sample = benign_df.sample(n=len(attack_df), random_state=42)                     # Benign을 공격 개수만큼만 샘플링해서 1:1 맞춤
 df_balanced = pd.concat([attack_df, benign_sample], ignore_index=True)
-# 모델 섞음
-df_balanced = df_balanced.sample(frac=1, random_state=42).reset_index(drop=True)
+
+df_balanced = df_balanced.sample(frac=1, random_state=42).reset_index(drop=True)        # 데이터 섞음
 
 print("\n[밸런싱 후 is_anomaly 분포]")
 print(df_balanced["is_anomaly"].value_counts())
@@ -134,13 +136,14 @@ print(df_balanced["is_anomaly"].value_counts())
 print("\n[밸런싱 후 label_big 분포]")
 print(df_balanced["label_big"].value_counts())
 
-# X, y 
+# -----------------------------------------------------------------------
+# 5. 데이터 전처리 및 Train/Test split
+#------------------------------------------------------------------------ 
 y = df_balanced["label_big"]
 X = df_balanced.drop(columns=["Label", "label_big", "is_anomaly"], errors="ignore")
 
-# 범주형/수치형 컬럼 자동 탐지
 cat_cols = []
-num_cols = []
+num_cols = []                                                                           # 범주형/수치형 컬럼 자동 탐지
 
 for c in X.columns:
     if X[c].dtype.name in ["object", "category"]:
@@ -148,8 +151,7 @@ for c in X.columns:
     else:
         num_cols.append(c)
 
-# Protocal 원핫인코딩 처리를 위해 범주형 변환
-if "Protocol" in num_cols:
+if "Protocol" in num_cols:                                                              # Protocal 원핫인코딩 처리를 위해 범주형 변환
     num_cols.remove("Protocol")
     cat_cols.append("Protocol")
     X["Protocol"] = X["Protocol"].astype("Int64").astype(str) 
@@ -157,33 +159,32 @@ if "Protocol" in num_cols:
 print("\n범주형 컬럼:", cat_cols)
 print("수치형 컬럼 수:", len(num_cols))
 
-# 전처리 파이프라인
-# - 범주형: 결측값을 최빈값으로 채우고 → 원핫인코딩
-cat_preprocess = Pipeline(steps=[
-    ("imputer", SimpleImputer(strategy="most_frequent")),
+cat_preprocess = Pipeline(steps=[                                                       # 전처리 파이프라인
+    ("imputer", SimpleImputer(strategy="most_frequent")),                               # - 범주형: 결측값을 최빈값으로 채우고 → 원핫인코딩
     ("onehot", OneHotEncoder(handle_unknown="ignore")),
 ])
 
-# - 수치형: 결측값을 중앙값으로 채우고 → 표준화(평균0, 표준편차1)
 num_preprocess = Pipeline(steps=[
-    ("imputer", SimpleImputer(strategy="median")),
+    ("imputer", SimpleImputer(strategy="median")),                                      # - 수치형: 결측값을 중앙값으로 채우고 → 표준화(평균0, 표준편차1)
     ("scaler", StandardScaler()),
 ])
-# 범주형/수치형 전처리를 합치기
+
 preprocess = ColumnTransformer(
     transformers=[
-        ("cat", cat_preprocess, cat_cols),
+        ("cat", cat_preprocess, cat_cols),                                              # 범주형/수치형 전처리를 합치기
         ("num", num_preprocess, num_cols),
     ],
     remainder="drop",
 )
 
-# Train/Test split
-X_train, X_test, y_train, y_test = train_test_split(
+X_train, X_test, y_train, y_test = train_test_split(                                    # Train/Test split
     X, y, test_size=0.2, random_state=42, stratify=y
 )
 
-# 모델 + 파이프라인 (전처리 + 분류기)
+# -----------------------------------------------------------------------
+# 6. 모델 학습 및 분석/학습으로 결과 산출
+#------------------------------------------------------------------------
+                                                                                        # 모델 + 파이프라인 (전처리 + 분류기)
 clf = Pipeline(steps=[
     ("preprocess", preprocess),
     ("model", RandomForestClassifier(
@@ -200,9 +201,9 @@ clf = Pipeline(steps=[
     ))
 ])
 
-# 분석 모드 / 학습 모드
+                                                                                        # 분석 모드 / 학습 모드
 ANALYZE_MODE = False
-# 학습 곡선 (현재 파라미터 기준, 데이터 양에 따른 성능 변화)
+                                                                                        # 학습 곡선 (현재 파라미터 기준, 데이터 양에 따른 성능 변화)
 def plot_learning_curve(estimator, X, y, title="Learning Curve"):
     print("학습 곡선 계산 중...")
 
@@ -228,7 +229,7 @@ def plot_learning_curve(estimator, X, y, title="Learning Curve"):
     plt.grid()
     plt.show()
 
-# 검증 곡선 (파라미터 값(max_depth)에 따른 성능 변화) 
+                                                                                            # 검증 곡선 (파라미터 값(max_depth)에 따른 성능 변화) 
 def plot_validation_curve(estimator, X, y, param_name, param_range, title="Validation Curve"):
     print("검증 곡선 계산 중...")
 
@@ -257,36 +258,37 @@ def plot_validation_curve(estimator, X, y, param_name, param_range, title="Valid
     plt.show()
 
 if ANALYZE_MODE:  
-    # 빠른 확인을 위한 샘플링
+                                                                                            # 빠른 확인을 위한 샘플링
     X_sample = X_train.sample(n=30000, random_state=42)
     y_sample = y_train.loc[X_sample.index]
 
-    # 학습 곡선 시각화
+                                                                                            # 학습 곡선 시각화
     plot_learning_curve(clf, X_sample, y_sample, "RF Learning Curve")
 
-    # 검증 곡선 시각화 (max_depth 최적값 찾기)
+                                                                                            # 검증 곡선 시각화 (max_depth 최적값 찾기)
     depth_range = [10, 12, 14, 15, 16, 18]
     plot_validation_curve(clf, X_sample, y_sample, "model__max_depth", depth_range)
-
-# 모델 학습 및 저장 
+# -----------------------------------------------------------------------
+# 7. 모델 저장
+#------------------------------------------------------------------------
 if not ANALYZE_MODE:
     print("모델 학습 중...")
     clf.fit(X_train, y_train)
 
-    # 예측값 생성 및 Classification Report 출력 
+                                                                                            # 예측값 생성 및 Classification Report 출력 
     y_pred = clf.predict(X_test)
     print("### Classification Report ###")
     print(classification_report(y_test, y_pred))
 
-    # 저장할 파일명 설정 (OUT_DIR)
+                                                                                            # 저장할 파일명 설정 (OUT_DIR)
     model_filename = "cicids2017_rf_model_v2.pkl"
     save_path = os.path.join(OUT_DIR, model_filename)
 
-    # 모델 저장 실행
+                                                                                            # 모델 저장 실행
     print(f"모델을 저장 중입니다: {save_path}")
     joblib.dump(clf, save_path)
     print("모델 저장 완료!")
 
-    # 저장된 파일 크기 확인
+                                                                                            # 저장된 파일 크기 확인
     file_size = os.path.getsize(save_path) / (1024 * 1024)
     print(f"모델 파일 크기: {file_size:.2f} MB")
