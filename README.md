@@ -415,7 +415,7 @@ VectorDB 검색과 LLM 생성을 결합하여 공격 유형별 보안 가이드�
 - **`run_guide`**
   - KISA 대응 가이드 기반 기술·운영 대응 절차 생성
  
-  - **`analyze_user_file_stats`**
+- **`analyze_user_file_stats`**
   - 세션에 저장된 사용자 로그 데이터를 기반으로 분석 수행
   - 특정 공격 유형과 정상 트래픽을 비교 분석
 
