@@ -2,8 +2,6 @@ from rag import rag_api
 from guide import *
 import streamlit as st
 
-
-
 @st.cache_resource
 def load_bundle():
     return rag_api.create_rag_bundle()
